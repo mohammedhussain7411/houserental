@@ -1,0 +1,11 @@
+services:
+  # RentEasy Web Application (Static Site on Render)
+  - type: web
+    name: renteasy-app
+    env: static
+    buildCommand: cd renteasy/web && npm install && npm run build
+    staticPublishPath: ./renteasy/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

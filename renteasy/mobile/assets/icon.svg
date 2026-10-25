@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="50%" stop-color="#4338ca"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="roofGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)"/>
+  <path d="M256 100 L400 220 L370 220 L370 380 L142 380 L142 220 L112 220 Z" fill="#ffffff" opacity="0.12"/>
+  <path d="M256 120 L390 230 L360 230 L360 370 L152 370 L152 230 L122 230 Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M256 80 L420 220 L380 220 L256 116 L132 220 L92 220 Z" fill="url(#roofGrad)"/>
+  <rect x="220" y="270" width="72" height="100" rx="10" fill="#4338ca"/>
+  <rect x="180" y="240" width="40" height="40" rx="8" fill="#e0e7ff"/>
+  <rect x="292" y="240" width="40" height="40" rx="8" fill="#e0e7ff"/>
+  <circle cx="270" cy="320" r="5" fill="#facc15"/>
+</svg>
