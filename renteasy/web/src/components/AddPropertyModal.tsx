@@ -27,18 +27,42 @@ export const AddPropertyModal: React.FC<AddPropertyModalProps> = ({ onClose, onS
 
   // Multi-unit configuration
   const [totalUnits, setTotalUnits] = useState('4');
-  const [unitPrefix, setUnitPrefix] = useState('Flat ');
-  const [startNumber, setStartNumber] = useState('101');
+  const [unitPrefix, setUnitPrefix] = useState('');
+  const [startNumber, setStartNumber] = useState('1');
+  const [prefixManuallyEdited, setPrefixManuallyEdited] = useState(false);
   const [useCustomNames, setUseCustomNames] = useState(false);
   const [customUnitNames, setCustomUnitNames] = useState('');
 
+  const getPropInitial = (str: string) => {
+    const trimmed = str.trim();
+    if (!trimmed) return '';
+    return trimmed.length <= 3 ? trimmed.toUpperCase() : trimmed.split(/\s+/).map(w => w[0]).join('').toUpperCase();
+  };
+
+  const propInitial = getPropInitial(name);
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    const initial = getPropInitial(val);
+    if (!prefixManuallyEdited) {
+      if (initial) {
+        setUnitPrefix(`${initial}-`);
+        setStartNumber('1');
+      } else {
+        setUnitPrefix('Flat ');
+        setStartNumber('101');
+      }
+    }
+  };
+
   // Live preview of generated unit numbers
   const count = Math.max(1, parseInt(totalUnits) || 1);
-  const startNum = parseInt(startNumber) || 101;
+  const startNum = parseInt(startNumber) || 1;
+  const effectivePrefix = unitPrefix || (propInitial ? `${propInitial}-` : 'Flat ');
 
   const generatedUnitsPreview: string[] = useCustomNames
     ? customUnitNames.split(',').map(s => s.trim()).filter(Boolean)
-    : Array.from({ length: Math.min(count, 12) }, (_, i) => `${unitPrefix}${startNum + i}`);
+    : Array.from({ length: Math.min(count, 12) }, (_, i) => `${effectivePrefix}${startNum + i}`);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +83,7 @@ export const AddPropertyModal: React.FC<AddPropertyModalProps> = ({ onClose, onS
       property_type: propertyType,
       default_rent: parseFloat(defaultRent) || 0,
       total_units: count,
-      unit_prefix: unitPrefix,
+      unit_prefix: effectivePrefix,
       start_number: startNum,
       custom_unit_names: customList && customList.length > 0 ? customList : undefined
     });
@@ -95,7 +119,7 @@ export const AddPropertyModal: React.FC<AddPropertyModalProps> = ({ onClose, onS
                 className="form-input"
                 placeholder="e.g. Prestige Lakeview Apartments or Sharma Commercial Complex"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => handleNameChange(e.target.value)}
                 required
               />
             </div>
@@ -199,11 +223,17 @@ export const AddPropertyModal: React.FC<AddPropertyModalProps> = ({ onClose, onS
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <select
                       className="form-select"
-                      style={{ width: '110px' }}
-                      value={unitPrefix}
-                      onChange={e => setUnitPrefix(e.target.value)}
+                      style={{ width: '130px' }}
+                      value={effectivePrefix}
+                      onChange={e => {
+                        setUnitPrefix(e.target.value);
+                        setPrefixManuallyEdited(true);
+                      }}
                       disabled={useCustomNames}
                     >
+                      {propInitial && (
+                        <option value={`${propInitial}-`}>{propInitial}- (Initial)</option>
+                      )}
                       <option value="Flat ">Flat </option>
                       <option value="Unit ">Unit </option>
                       <option value="House #">House #</option>

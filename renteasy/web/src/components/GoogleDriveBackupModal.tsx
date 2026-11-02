@@ -40,7 +40,8 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
 
   // Login form state
   const landlord = rentEasyApi.getLandlord();
-  const [googleEmail, setGoogleEmail] = useState<string>(session.email || landlord.email || 'rajesh.sharma@gmail.com');
+  const [googleEmail, setGoogleEmail] = useState<string>(session.email || landlord.email || '');
+  const [googleName, setGoogleName] = useState<string>(session.name || landlord.name || '');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
   // Cloud action states
@@ -82,7 +83,7 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
     return kb + ' KB';
   };
 
-  // 1. GOOGLE LOGIN HANDLER
+  // 1. GOOGLE LOGIN & USER LINKING HANDLER
   const handleGoogleSignIn = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!googleEmail || !googleEmail.includes('@')) {
@@ -92,12 +93,25 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
 
     setIsLoggingIn(true);
     setTimeout(() => {
-      const newSession = rentEasyApi.loginGoogleDrive(googleEmail);
+      const { session: newSession } = rentEasyApi.createUserWithGoogle(googleEmail, googleName);
       setSession(newSession);
       setCloudBackups(rentEasyApi.getGoogleDriveCloudBackups());
       setIsLoggingIn(false);
-      setCloudNotice(`Successfully signed in with Google (${newSession.email}). Google Drive cloud sync is active!`);
+      setCloudNotice(`Successfully linked Google Account (${newSession.email}). Automatic Google Drive cloud backup is ACTIVE!`);
     }, 600);
+  };
+
+  const handleToggleAutoBackup = () => {
+    const nextVal = !session.autoBackup;
+    rentEasyApi.updateGoogleDriveAutoBackup(nextVal);
+    setSession(prev => ({ ...prev, autoBackup: nextVal }));
+    if (nextVal) {
+      rentEasyApi.triggerAutoGoogleDriveBackup();
+      setCloudBackups(rentEasyApi.getGoogleDriveCloudBackups());
+      setCloudNotice('Continuous Auto-Backup to Google Drive is now ACTIVE! Every change will be backed up automatically.');
+    } else {
+      setCloudNotice('Continuous Auto-Backup paused. You can still save manual backups to Drive at any time.');
+    }
   };
 
   const handleGoogleSignOut = () => {
@@ -489,7 +503,21 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
               >
                 <div style={{ textAlign: 'left' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px', display: 'block' }}>
-                    Your Google Account Email:
+                    Your Full Name:
+                  </label>
+                  <input
+                    type="text"
+                    value={googleName}
+                    onChange={e => setGoogleName(e.target.value)}
+                    placeholder="e.g. Mohammed Hussain"
+                    className="form-input"
+                    style={{ fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div style={{ textAlign: 'left' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px', display: 'block' }}>
+                    Google Account Email:
                   </label>
                   <input
                     type="email"
@@ -519,7 +547,7 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
                   disabled={isLoggingIn}
                 >
                   {isLoggingIn ? <RefreshCw size={18} className="spin" /> : <Cloud size={18} />}
-                  <span>Sign In & Connect Google Drive</span>
+                  <span>Sign In & Enable Auto-Backup to Drive</span>
                 </button>
               </form>
 
@@ -598,6 +626,73 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
                         <ExternalLink size={15} />
                       </a>
                     </div>
+                  </div>
+
+                  {/* CONTINUOUS AUTO-BACKUP TOGGLE BANNER */}
+                  <div
+                    style={{
+                      padding: '16px 20px',
+                      borderRadius: 'var(--radius-lg)',
+                      background: session.autoBackup ? 'rgba(52, 168, 83, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                      border: session.autoBackup ? '1px solid rgba(52, 168, 83, 0.4)' : '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '16px',
+                      flexWrap: 'wrap'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '260px' }}>
+                      <div
+                        style={{
+                          width: '42px',
+                          height: '42px',
+                          borderRadius: '10px',
+                          background: session.autoBackup ? 'rgba(52, 168, 83, 0.2)' : 'rgba(255, 255, 255, 0.06)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                      >
+                        <FolderSync size={22} color={session.autoBackup ? '#34d399' : 'var(--text-dim)'} />
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
+                            Automatic Cloud Backup to Drive
+                          </strong>
+                          <span
+                            className={session.autoBackup ? 'badge badge-paid' : 'badge badge-pending'}
+                            style={{ fontSize: '0.72rem', fontWeight: 700 }}
+                          >
+                            {session.autoBackup ? 'ACTIVE & PROTECTED' : 'PAUSED'}
+                          </span>
+                        </div>
+                        <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {session.autoBackup
+                            ? `Every property, tenant, rent charge, and payment update is instantly backed up to Google Drive (${session.email}).`
+                            : 'Enable auto-backup to continuously safeguard your portfolio in Google Drive without clicking Save.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`btn ${session.autoBackup ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+                      onClick={handleToggleAutoBackup}
+                      style={{
+                        padding: '10px 16px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        background: session.autoBackup ? undefined : 'linear-gradient(135deg, #34A853 0%, #2e7d32 100%)',
+                        border: 'none',
+                        color: '#fff',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {session.autoBackup ? 'Pause Auto-Backup' : 'Enable Auto-Backup'}
+                    </button>
                   </div>
 
                   {/* Google Sheets CSV Exports Section */}

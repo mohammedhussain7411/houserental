@@ -12,9 +12,11 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+const DEFAULT_PRODUCTION_URL = 'https://renteasy-app.onrender.com/';
+
 export default function MobileApp() {
-  const [currentUrl, setCurrentUrl] = useState('http://192.168.0.104:5174/');
-  const [inputUrl, setInputUrl] = useState('http://192.168.0.104:5174/');
+  const [currentUrl, setCurrentUrl] = useState(DEFAULT_PRODUCTION_URL);
+  const [inputUrl, setInputUrl] = useState(DEFAULT_PRODUCTION_URL);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -65,7 +67,7 @@ export default function MobileApp() {
               onChangeText={setInputUrl}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="http://192.168.0.104:5174/"
+              placeholder="https://renteasy-app.onrender.com/ or IP"
               placeholderTextColor="#64748b"
             />
             <TouchableOpacity style={styles.configBtn} onPress={handleSaveUrl}>
@@ -94,14 +96,14 @@ export default function MobileApp() {
           ) : null}
 
           <View style={styles.configBox}>
-            <Text style={styles.configLabel}>Target Address (IP or HTTPS URL):</Text>
+            <Text style={styles.configLabel}>Target Address (Render URL or Local IP):</Text>
             <TextInput
               style={styles.configInput}
               value={inputUrl}
               onChangeText={setInputUrl}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="http://192.168.0.104:5174/"
+              placeholder="https://renteasy-app.onrender.com/ or local IP"
               placeholderTextColor="#64748b"
             />
             <TouchableOpacity style={styles.retryBtn} onPress={handleSaveUrl}>
@@ -110,10 +112,10 @@ export default function MobileApp() {
           </View>
 
           <View style={styles.checklist}>
-            <Text style={styles.checklistTitle}>Quick Checklist:</Text>
-            <Text style={styles.checklistItem}>• Phone and PC must be on the same Wi-Fi</Text>
-            <Text style={styles.checklistItem}>• Allow port 5174 through Windows Firewall</Text>
-            <Text style={styles.checklistItem}>• Or host online (Vercel / Cloud) for 24/7 access</Text>
+            <Text style={styles.checklistTitle}>Connection Options:</Text>
+            <Text style={styles.checklistItem}>• Deployed on Render: enter your https://...onrender.com/ URL</Text>
+            <Text style={styles.checklistItem}>• Running on PC: enter http://&lt;PC-IP&gt;:5174/ on same Wi-Fi</Text>
+            <Text style={styles.checklistItem}>• Live two-way sync keeps Mobile and PC in lockstep</Text>
           </View>
         </View>
       ) : (
@@ -127,6 +129,7 @@ export default function MobileApp() {
             mixedContentMode="always"
             allowsBackForwardNavigationGestures={true}
             originWhitelist={['*']}
+            userAgent="Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
             onNavigationStateChange={(navState) => {
               setCanGoBack(navState.canGoBack);
             }}
@@ -147,6 +150,21 @@ export default function MobileApp() {
               <Text style={styles.loadingText}>Loading RentEasy...</Text>
             </View>
           )}
+
+          {/* Mobile Native Quick Sync Now Pill */}
+          <TouchableOpacity
+            style={[styles.serverFloatingBtn, { right: 65, width: 'auto', paddingHorizontal: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            onPress={() => {
+              webViewRef.current?.injectJavaScript(`
+                if (window.dispatchEvent) {
+                  window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'mobile_sync_btn' } }));
+                }
+                true;
+              `);
+            }}
+          >
+            <Text style={{ color: '#34d399', fontSize: 12, fontWeight: '700' }}>🔄 Sync Now</Text>
+          </TouchableOpacity>
 
           {/* Subtle server IP switch button at bottom corner */}
           <TouchableOpacity

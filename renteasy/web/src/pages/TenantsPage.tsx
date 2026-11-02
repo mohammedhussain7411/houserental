@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Tenant, Property, RentCharge } from '../types';
 import { rentEasyApi } from '../services/rentEasyApi';
 import { AddTenantModal } from '../components/AddTenantModal';
+import { EditHouseNumberModal, EditHouseNumberTarget } from '../components/EditHouseNumberModal';
+import { RentalAgreementModal } from '../components/RentalAgreementModal';
 import {
   Users,
   UserPlus,
@@ -21,7 +23,10 @@ import {
   FileSpreadsheet,
   Trash2,
   PhoneCall,
-  Pencil
+  Pencil,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 
 interface TenantsPageProps {
@@ -40,6 +45,8 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [tenants, setTenants] = useState<Tenant[]>(rentEasyApi.getTenants());
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [editingHouseTarget, setEditingHouseTarget] = useState<EditHouseNumberTarget | null>(null);
+  const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState<Tenant | null>(null);
   const charges = rentEasyApi.getRentCharges();
 
   // Real-time synchronization listener for Phone <-> Web updates
@@ -54,6 +61,18 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
 
   const handleTogglePreference = (tenantId: string, channel: 'whatsapp' | 'sms') => {
     rentEasyApi.toggleTenantPreference(tenantId, channel);
+    setTenants(rentEasyApi.getTenants());
+  };
+
+  const handleMoveTenant = (tenantId: string, direction: 'up' | 'down') => {
+    const success = rentEasyApi.moveTenantOrder(tenantId, direction);
+    if (success) {
+      setTenants(rentEasyApi.getTenants());
+    }
+  };
+
+  const handleSortByHouse = () => {
+    rentEasyApi.sortTenantsByHouseNumber(true);
     setTenants(rentEasyApi.getTenants());
   };
 
@@ -127,6 +146,26 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
           >
             <Pencil size={14} /> Edit Tenant Details
           </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{
+              color: '#a5b4fc',
+              borderColor: 'rgba(99, 102, 241, 0.4)',
+              backgroundColor: 'rgba(99, 102, 241, 0.12)'
+            }}
+            onClick={() => {
+              if (filtered.length > 0) {
+                setSelectedTenantForAgreement(filtered[0]);
+              } else if (tenants.length > 0) {
+                setSelectedTenantForAgreement(tenants[0]);
+              } else {
+                alert('No tenants registered yet. Register a tenant first.');
+              }
+            }}
+            title="Create, view, or edit rental agreement with owner, house type (1RK/1BHK/2BHK/3BHK), and painting clauses"
+          >
+            <FileText size={14} color="#818cf8" /> Rental Agreements
+          </button>
           <button className="btn btn-primary" onClick={onOpenAddTenant}>
             <UserPlus size={16} /> Register New Tenant
           </button>
@@ -146,12 +185,29 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem' }}>
-          <div style={{ background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.78rem',
+              padding: '6px 12px',
+              borderColor: 'rgba(56, 189, 248, 0.3)',
+              backgroundColor: 'rgba(56, 189, 248, 0.08)',
+              color: '#38bdf8'
+            }}
+            onClick={handleSortByHouse}
+            title="Auto-sort tenants in natural order by House Number (House #1, House #2, etc.)"
+          >
+            <ArrowUpDown size={14} /> Auto-Sort by House #
+          </button>
+          <div style={{ background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}>
             <span style={{ color: 'var(--text-dim)' }}>Total Tenants: </span>
             <strong style={{ color: '#fff' }}>{tenants.length}</strong>
           </div>
-          <div style={{ background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ background: 'var(--bg-card)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', fontSize: '0.85rem' }}>
             <span style={{ color: 'var(--text-dim)' }}>Total Security Deposits: </span>
             <strong style={{ color: '#34d399', fontFamily: 'var(--font-mono)' }}>
               ₹{tenants.reduce((acc, t) => acc + (t.deposit_amount || 0), 0).toLocaleString('en-IN')}
@@ -166,6 +222,7 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
           <table className="data-table">
             <thead>
               <tr>
+                <th style={{ width: '65px', textAlign: 'center' }}>Move</th>
                 <th>Tenant & Contact</th>
                 <th>House Number</th>
                 <th>Move-In Date</th>
@@ -177,11 +234,50 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filtered.map(t => {
+              {filtered.map((t, index) => {
                 const tenantCharge = charges.find(c => (c.lease_id === t.active_lease_id || c.tenant_name === t.name) && c.outstanding_balance > 0);
 
                 return (
                   <tr key={t.id}>
+                    {/* Move Up / Down Buttons */}
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap', width: '65px' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <button
+                          onClick={() => handleMoveTenant(t.id, 'up')}
+                          disabled={index === 0}
+                          style={{
+                            background: index === 0 ? 'transparent' : 'rgba(56, 189, 248, 0.12)',
+                            border: index === 0 ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(56, 189, 248, 0.35)',
+                            color: index === 0 ? '#475569' : '#38bdf8',
+                            cursor: index === 0 ? 'not-allowed' : 'pointer',
+                            padding: '3px 6px',
+                            borderRadius: '5px',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                          }}
+                          title={`Move ${t.name} Up (↑)`}
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleMoveTenant(t.id, 'down')}
+                          disabled={index === filtered.length - 1}
+                          style={{
+                            background: index === filtered.length - 1 ? 'transparent' : 'rgba(56, 189, 248, 0.12)',
+                            border: index === filtered.length - 1 ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(56, 189, 248, 0.35)',
+                            color: index === filtered.length - 1 ? '#475569' : '#38bdf8',
+                            cursor: index === filtered.length - 1 ? 'not-allowed' : 'pointer',
+                            padding: '3px 6px',
+                            borderRadius: '5px',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                          }}
+                          title={`Move ${t.name} Down (↓)`}
+                        >
+                          <ArrowDown size={13} />
+                        </button>
+                      </div>
+                    </td>
                     {/* Name & Mobile */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
@@ -264,11 +360,31 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
                     </td>
 
                     {/* House Number */}
-                    <td style={{ cursor: 'pointer' }} onClick={() => setEditingTenant(t)} title="Click to edit house & tenant details">
-                      <div style={{ fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Home size={15} color="var(--primary)" /> {t.house_number}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                        <div style={{ fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Home size={15} color="var(--primary)" /> {t.house_number}
+                        </div>
+                        <button
+                          className="btn btn-secondary btn-xs"
+                          style={{
+                            padding: '2px 7px',
+                            fontSize: '0.68rem',
+                            color: '#38bdf8',
+                            borderColor: 'rgba(56, 189, 248, 0.35)',
+                            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setEditingHouseTarget({ type: 'tenant', tenant: t })}
+                          title={`Edit / rename house number for ${t.name}`}
+                        >
+                          <Pencil size={10} /> Edit House #
+                        </button>
                       </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '2px' }}>
                         {t.linked_property_name || 'Independent Unit'}
                       </div>
                     </td>
@@ -313,28 +429,54 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
                     </td>
 
                     {/* Live Balance Amount */}
-                    <td>
+                    <td style={{ cursor: 'pointer' }} onClick={() => setEditingTenant(t)} title="Click to edit tenant balance, rent, or agreement details">
                       <div
                         style={{
                           fontFamily: 'var(--font-mono)',
                           fontWeight: 800,
                           fontSize: '1.1rem',
-                          color: t.balance_amount > 0 ? '#fbbf24' : '#34d399'
+                          color: t.balance_amount > 0 ? '#fbbf24' : '#34d399',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
                         }}
                       >
-                        ₹{t.balance_amount.toLocaleString('en-IN')}
+                        <span>₹{t.balance_amount.toLocaleString('en-IN')}</span>
+                        <Pencil size={11} color="#64748b" />
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px' }}>
                         {t.balance_amount > 0 ? (
                           <span style={{ color: '#fb7185' }}>Pending Dues</span>
                         ) : (
                           <span style={{ color: '#34d399' }}>Clear / No Dues</span>
+                        )}
+                        {t.initial_balance > 0 && (
+                          <span style={{ color: '#38bdf8', fontSize: '0.68rem', fontWeight: 600 }}>
+                            (₹{t.initial_balance.toLocaleString('en-IN')} prev bal)
+                          </span>
                         )}
                       </div>
                     </td>
 
                     {/* Collect Payment, Edit Tenant & Receipt Trigger */}
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          color: '#a5b4fc',
+                          borderColor: 'rgba(99, 102, 241, 0.4)',
+                          backgroundColor: 'rgba(99, 102, 241, 0.12)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          fontWeight: 600,
+                          marginRight: '6px'
+                        }}
+                        onClick={() => setSelectedTenantForAgreement(t)}
+                        title={`Create, view or edit rental agreement for ${t.name} (House ${t.house_number})`}
+                      >
+                        <FileText size={13} /> Agreement
+                      </button>
                       <button
                         className="btn btn-secondary btn-sm"
                         style={{
@@ -401,11 +543,13 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
         </div>
       </div>
 
-      {/* Edit Tenant & Rent Modal */}
+      {/* Edit Tenant & Rent Modal with Up/Down Tenant Switcher */}
       {editingTenant && (
         <AddTenantModal
           properties={properties}
           tenantToEdit={editingTenant}
+          allTenants={filtered.length > 0 ? filtered : tenants}
+          onNavigateTenant={(next) => setEditingTenant(next)}
           onClose={() => setEditingTenant(null)}
           onSuccess={(updated) => {
             setEditingTenant(null);
@@ -413,6 +557,30 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
             if (onTenantUpdated) {
               onTenantUpdated(updated);
             }
+          }}
+        />
+      )}
+
+      {/* Edit House Number Modal */}
+      <EditHouseNumberModal
+        isOpen={!!editingHouseTarget}
+        target={editingHouseTarget}
+        onClose={() => setEditingHouseTarget(null)}
+        onSuccess={() => {
+          setEditingHouseTarget(null);
+          setTenants(rentEasyApi.getTenants());
+        }}
+      />
+
+      {/* Rental Agreement Modal */}
+      {selectedTenantForAgreement && (
+        <RentalAgreementModal
+          tenant={selectedTenantForAgreement}
+          isOpen={!!selectedTenantForAgreement}
+          properties={properties}
+          onClose={() => setSelectedTenantForAgreement(null)}
+          onAgreementSaved={() => {
+            setTenants(rentEasyApi.getTenants());
           }}
         />
       )}

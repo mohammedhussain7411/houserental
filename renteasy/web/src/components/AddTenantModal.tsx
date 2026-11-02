@@ -16,7 +16,9 @@ import {
   FileText,
   Building2,
   Mail,
-  ShieldAlert
+  ShieldAlert,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 
 interface AddTenantModalProps {
@@ -24,6 +26,8 @@ interface AddTenantModalProps {
   initialPropertyId?: string;
   initialUnitNumber?: string;
   tenantToEdit?: Tenant | null;
+  allTenants?: Tenant[];
+  onNavigateTenant?: (tenant: Tenant) => void;
   onClose: () => void;
   onSuccess: (tenant: Tenant) => void;
 }
@@ -33,6 +37,8 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
   initialPropertyId,
   initialUnitNumber,
   tenantToEdit,
+  allTenants,
+  onNavigateTenant,
   onClose,
   onSuccess
 }) => {
@@ -46,7 +52,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
   const [propertyId, setPropertyId] = useState<string>(() => {
     if (tenantToEdit) {
       if (tenantToEdit.property_id) return tenantToEdit.property_id;
-      const matched = properties.find(p => p.name === tenantToEdit.linked_property_name);
+      const matched = properties.find(p => p.name.trim().toLowerCase() === tenantToEdit.linked_property_name?.trim().toLowerCase());
       if (matched) return matched.id;
     }
     return initialPropertyId || '';
@@ -90,7 +96,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
       if (tenantToEdit.property_id) {
         setPropertyId(tenantToEdit.property_id);
       } else if (tenantToEdit.linked_property_name) {
-        const matched = properties.find(p => p.name === tenantToEdit.linked_property_name);
+        const matched = properties.find(p => p.name.trim().toLowerCase() === tenantToEdit.linked_property_name?.trim().toLowerCase());
         if (matched) setPropertyId(matched.id);
       }
     } else if (initialPropertyId) {
@@ -144,6 +150,14 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
       return;
     }
 
+    let cleanHouse = houseNumber.trim();
+    if (selectedProperty && /^\d+$/.test(cleanHouse)) {
+      const initial = selectedProperty.name.trim().length <= 3
+        ? selectedProperty.name.trim().toUpperCase()
+        : selectedProperty.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase();
+      cleanHouse = `${initial}-${cleanHouse}`;
+    }
+
     if (isEditing && tenantToEdit) {
       const updated = rentEasyApi.updateTenant(tenantToEdit.id, {
         name: name.trim(),
@@ -151,7 +165,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
         whatsapp_number: phone.trim(),
         email: email.trim() || undefined,
         emergency_contact: emergencyContact.trim() || undefined,
-        house_number: houseNumber.trim(),
+        house_number: cleanHouse,
         date,
         monthly_rent: parseFloat(monthlyRent) || 0,
         due_day: parseInt(dueDay) || 5,
@@ -159,6 +173,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
         deposit_paid: depositPaid,
         aadhaar_number: aadhaarNumber.trim() || undefined,
         permanent_address: permanentAddress.trim() || undefined,
+        initial_balance: parseFloat(initialBalance) || 0,
         property_id: propertyId || undefined,
         whatsapp_enabled: whatsappEnabled,
         sms_enabled: smsEnabled,
@@ -176,7 +191,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
         whatsapp_number: phone.trim(),
         email: email.trim() || undefined,
         emergency_contact: emergencyContact.trim() || undefined,
-        house_number: houseNumber.trim(),
+        house_number: cleanHouse,
         date,
         monthly_rent: parseFloat(monthlyRent) || 0,
         due_day: parseInt(dueDay) || 5,
@@ -200,26 +215,95 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-dialog" style={{ maxWidth: '660px' }} onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {isEditing ? <Edit3 size={18} color="var(--primary)" /> : <UserPlus size={18} color="var(--primary)" />}
+        {/* Header with optional Prev/Next tenant navigation */}
+        {(() => {
+          const currentIndex = isEditing && allTenants && tenantToEdit
+            ? allTenants.findIndex(t => t.id === tenantToEdit.id)
+            : -1;
+          const canGoPrev = currentIndex > 0;
+          const canGoNext = allTenants && currentIndex >= 0 && currentIndex < allTenants.length - 1;
+
+          return (
+            <div className="modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isEditing ? <Edit3 size={18} color="var(--primary)" /> : <UserPlus size={18} color="var(--primary)" />}
+                </div>
+                <div>
+                  <h3 className="card-title" style={{ margin: 0 }}>
+                    {isEditing ? 'Edit Tenant Details & Rent' : 'Register Tenant & Assign House'}
+                  </h3>
+                  <p className="card-subtitle">
+                    {isEditing
+                      ? 'Update contact info, monthly rent, house assignment, due date, and KYC'
+                      : 'Auto-updates monthly rent on the given date and tracks house balance'}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {isEditing && allTenants && allTenants.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px 8px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', paddingRight: '4px', fontWeight: 600 }}>
+                      {currentIndex + 1} of {allTenants.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      disabled={!canGoPrev}
+                      onClick={() => {
+                        if (canGoPrev && onNavigateTenant && allTenants) {
+                          onNavigateTenant(allTenants[currentIndex - 1]);
+                        }
+                      }}
+                      title="Move Up to Previous Tenant (↑)"
+                      style={{
+                        padding: '2px 7px',
+                        fontSize: '0.7rem',
+                        color: canGoPrev ? '#38bdf8' : '#475569',
+                        borderColor: canGoPrev ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255,255,255,0.05)',
+                        backgroundColor: canGoPrev ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                        cursor: canGoPrev ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px'
+                      }}
+                    >
+                      <ArrowUp size={12} /> Up
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-xs"
+                      disabled={!canGoNext}
+                      onClick={() => {
+                        if (canGoNext && onNavigateTenant && allTenants) {
+                          onNavigateTenant(allTenants[currentIndex + 1]);
+                        }
+                      }}
+                      title="Move Down to Next Tenant (↓)"
+                      style={{
+                        padding: '2px 7px',
+                        fontSize: '0.7rem',
+                        color: canGoNext ? '#38bdf8' : '#475569',
+                        borderColor: canGoNext ? 'rgba(56, 189, 248, 0.35)' : 'rgba(255,255,255,0.05)',
+                        backgroundColor: canGoNext ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                        cursor: canGoNext ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '2px'
+                      }}
+                    >
+                      Down <ArrowDown size={12} />
+                    </button>
+                  </div>
+                )}
+                <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ padding: '6px' }}>
+                  <X size={18} />
+                </button>
+              </div>
             </div>
-            <div>
-              <h3 className="card-title" style={{ margin: 0 }}>
-                {isEditing ? 'Edit Tenant Details & Rent' : 'Register Tenant & Assign House'}
-              </h3>
-              <p className="card-subtitle">
-                {isEditing
-                  ? 'Update contact info, monthly rent, house assignment, due date, and KYC'
-                  : 'Auto-updates monthly rent on the given date and tracks house balance'}
-              </p>
-            </div>
-          </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
+          );
+        })()}
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto' }}>
@@ -451,20 +535,25 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
               </div>
 
               <div className="form-group">
-                <label className="form-label">
-                  {isEditing ? 'Starting Balance (₹)' : 'Existing Balance (₹, if any)'}
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <IndianRupee size={14} color="#38bdf8" />
+                  {isEditing ? 'Previous / Starting Balance (₹)' : 'Existing Balance (₹, if any)'}
                 </label>
                 <input
                   type="number"
                   className="form-input"
-                  style={{ fontFamily: 'var(--font-mono)' }}
+                  style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}
                   placeholder="0"
                   value={initialBalance}
                   onChange={e => setInitialBalance(e.target.value)}
                 />
                 {isEditing && tenantToEdit && (
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
-                    Current Live Total Balance: <strong style={{ color: tenantToEdit.balance_amount > 0 ? '#fbbf24' : '#34d399' }}>₹{tenantToEdit.balance_amount.toLocaleString('en-IN')}</strong>
+                  <span style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
+                    💡 Updating previous balance will immediately recalculate this tenant's dues from ₹{tenantToEdit.balance_amount.toLocaleString('en-IN')} to{' '}
+                    <strong style={{ color: '#fbbf24' }}>
+                      ₹{((parseFloat(monthlyRent) || 0) + (parseFloat(initialBalance) || 0)).toLocaleString('en-IN')}
+                    </strong>{' '}
+                    total dues.
                   </span>
                 )}
               </div>

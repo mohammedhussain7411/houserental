@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Property, PropertyUnit, RentCharge, Tenant } from '../types';
 import { rentEasyApi } from '../services/rentEasyApi';
 import { AddTenantModal } from '../components/AddTenantModal';
+import { EditHouseNumberModal, EditHouseNumberTarget } from '../components/EditHouseNumberModal';
 import {
   Building2,
   Plus,
@@ -39,6 +40,7 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
   const [expandedPropertyId, setExpandedPropertyId] = useState<string | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [editingHouseTarget, setEditingHouseTarget] = useState<EditHouseNumberTarget | null>(null);
 
   const [properties, setProperties] = useState<Property[]>(rentEasyApi.getProperties());
   const [tenants, setTenants] = useState<Tenant[]>(rentEasyApi.getTenants());
@@ -56,13 +58,17 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
 
   // Reliable helper to find the active tenant for any property and unit
   const getUnitTenant = (p: Property, u: PropertyUnit): Tenant | undefined => {
-    return tenants.find(t =>
-      (t.active_lease_id && u.current_lease_id && t.active_lease_id === u.current_lease_id) ||
-      (u.current_tenant_name && t.name.trim().toLowerCase() === u.current_tenant_name.trim().toLowerCase()) ||
-      (t.house_number && u.unit_number && t.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase() &&
-       (!t.linked_property_name || t.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase())) ||
-      (t.property_id && t.property_id === p.id && t.house_number && u.unit_number && t.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase())
-    );
+    return tenants.find(t => {
+      const isTargetProp =
+        (t.property_id && t.property_id === p.id) ||
+        (t.linked_property_name && t.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+      return (
+        (t.active_lease_id && u.current_lease_id && t.active_lease_id === u.current_lease_id) ||
+        (isTargetProp && t.house_number && u.unit_number && t.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase()) ||
+        (isTargetProp && u.current_tenant_name && t.name.trim().toLowerCase() === u.current_tenant_name.trim().toLowerCase())
+      );
+    });
   };
 
   const filtered = properties.filter(p => {
@@ -85,10 +91,17 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
   };
 
   const handleAddUnitDirect = (propId: string) => {
-    const unitNo = prompt('Enter new Unit Number (e.g. Flat 401 or Penthouse):');
+    const prop = properties.find(p => p.id === propId);
+    const initial = prop
+      ? (prop.name.trim().length <= 3 ? prop.name.trim().toUpperCase() : prop.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase())
+      : '';
+    const nextNum = (prop?.units?.length || 0) + 1;
+    const defaultSuggestion = initial ? `${initial}-${nextNum}` : `Flat ${nextNum}`;
+
+    const unitNo = prompt(`Enter new Unit Number (recommended: ${defaultSuggestion}):`, defaultSuggestion);
     if (!unitNo || !unitNo.trim()) return;
-    const rentStr = prompt('Enter monthly rent for this unit (₹):', '25000');
-    const rent = parseFloat(rentStr || '0') || 25000;
+    const rentStr = prompt('Enter monthly rent for this unit (₹):', String(prop?.default_rent || 25000));
+    const rent = parseFloat(rentStr || '0') || (prop?.default_rent || 25000);
 
     try {
       rentEasyApi.addUnitToProperty(propId, unitNo.trim(), rent);
@@ -312,10 +325,39 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div>
-                              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#ffffff' }}>
-                                {u.unit_number}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#ffffff' }}>
+                                  {u.unit_number}
+                                </div>
+                                <button
+                                  onClick={() =>
+                                    setEditingHouseTarget({
+                                      type: 'unit',
+                                      propertyId: p.id,
+                                      propertyName: p.name,
+                                      unit: u,
+                                      assignedTenant
+                                    })
+                                  }
+                                  style={{
+                                    background: 'rgba(56, 189, 248, 0.1)',
+                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                    color: '#38bdf8',
+                                    cursor: 'pointer',
+                                    padding: '2px 7px',
+                                    borderRadius: '5px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 600
+                                  }}
+                                  title={`Edit or rename house/unit number "${u.unit_number}"`}
+                                >
+                                  <Pencil size={10} /> Edit House #
+                                </button>
                               </div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '2px' }}>
                                 {u.property_type || p.property_type}
                               </div>
                             </div>
@@ -386,7 +428,7 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
                                       fontWeight: 600
                                     }}
                                     onClick={() => {
-                                      const t = assignedTenant || tenants.find(item => item.name === u.current_tenant_name || item.active_lease_id === u.current_lease_id);
+                                      const t = assignedTenant || getUnitTenant(p, u);
                                       if (t) {
                                         setEditingTenant(t);
                                       } else {
@@ -436,11 +478,13 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
         })}
       </div>
 
-      {/* Edit Tenant & Rent Modal */}
+      {/* Edit Tenant & Rent Modal with Up/Down Tenant Switcher */}
       {editingTenant && (
         <AddTenantModal
           properties={properties}
           tenantToEdit={editingTenant}
+          allTenants={tenants}
+          onNavigateTenant={(next) => setEditingTenant(next)}
           onClose={() => setEditingTenant(null)}
           onSuccess={(updated) => {
             setEditingTenant(null);
@@ -455,6 +499,18 @@ export const PropertiesPage: React.FC<PropertiesPageProps> = ({
           }}
         />
       )}
+
+      {/* Edit House Number Modal */}
+      <EditHouseNumberModal
+        isOpen={!!editingHouseTarget}
+        target={editingHouseTarget}
+        onClose={() => setEditingHouseTarget(null)}
+        onSuccess={() => {
+          setEditingHouseTarget(null);
+          setProperties(rentEasyApi.getProperties());
+          setTenants(rentEasyApi.getTenants());
+        }}
+      />
     </div>
   );
 };

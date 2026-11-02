@@ -25,9 +25,9 @@ export const MobileInstallModal: React.FC<MobileInstallModalProps> = ({ onClose 
   const [activeTab, setActiveTab] = useState<'instant' | 'apk' | 'playstore' | 'ios'>('instant');
   const [copied, setCopied] = useState<boolean>(false);
   const localNetworkUrl =
-    typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+    typeof window !== 'undefined' && window.location && !window.location.origin.startsWith('file:')
       ? `${window.location.origin}/`
-      : 'http://192.168.0.104:5174/';
+      : 'http://localhost:5174/';
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(localNetworkUrl);

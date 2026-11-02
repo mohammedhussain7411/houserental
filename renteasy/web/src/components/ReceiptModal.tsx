@@ -11,15 +11,17 @@ import {
   Calendar,
   CreditCard,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Pencil
 } from 'lucide-react';
 
 interface ReceiptModalProps {
   receipt: Receipt | null;
   onClose: () => void;
+  onEditReceipt?: (receipt: Receipt) => void;
 }
 
-export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) => {
+export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, onEditReceipt }) => {
   if (!receipt) return null;
 
   const landlord = rentEasyApi.getLandlord();
@@ -59,9 +61,32 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
             <FileText size={20} color="var(--primary)" />
             <h3 className="card-title" style={{ margin: 0 }}>Digital Rent Receipt</h3>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {onEditReceipt && (
+              <button
+                className="btn btn-secondary btn-sm"
+                title="Edit Payment Receipt Details"
+                style={{
+                  color: '#38bdf8',
+                  borderColor: 'rgba(56, 189, 248, 0.4)',
+                  backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+                onClick={() => {
+                  onClose();
+                  onEditReceipt(receipt);
+                }}
+              >
+                <Pencil size={13} />
+                <span>Edit Receipt</span>
+              </button>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="modal-body">
@@ -182,6 +207,18 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
         </div>
 
         <div className="modal-footer">
+          {onEditReceipt && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                onClose();
+                onEditReceipt(receipt);
+              }}
+              style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.4)' }}
+            >
+              <Pencil size={15} /> Edit Receipt
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={handlePrint}>
             <Printer size={16} /> Print / Save PDF
           </button>

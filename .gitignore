@@ -59,3 +59,12 @@ Thumbs.db
 *.swo
 .vscode/
 .idea/
+
+# Mobile Builds & Expo
+*.aab
+*.apk
+.expo/
+renteasy/mobile/.expo/
+renteasy/mobile/dist/
+renteasy/mobile/META-INF/
+renteasy/mobile/upload_certificate.pem

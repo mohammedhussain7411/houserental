@@ -112,7 +112,36 @@ export function renteasySyncPlugin(): Plugin {
       req.on('end', () => {
         try {
           const parsed = JSON.parse(bodyStr || '{}');
-          const newRevision = parsed.revision || Date.now();
+          const incomingRev = Number(parsed.revision) || 0;
+
+          // Re-verify latest disk revision
+          try {
+            if (fs.existsSync(DB_FILE)) {
+              const raw = fs.readFileSync(DB_FILE, 'utf-8');
+              const currentDiskDb = JSON.parse(raw);
+              revision = currentDiskDb?.meta?.revision || revision;
+              updatedAt = currentDiskDb?.meta?.updated_at || updatedAt;
+            }
+          } catch (e) {}
+
+          // If incoming revision is strictly older than current server revision, reject to prevent stale overwrites
+          if (incomingRev > 0 && revision > 0 && incomingRev < revision) {
+            console.warn(`[RentEasy Sync] Rejecting stale push: incoming revision ${incomingRev} is older than server revision ${revision}`);
+            res.setHeader('Content-Type', 'application/json');
+            res.statusCode = 409;
+            res.end(
+              JSON.stringify({
+                success: false,
+                conflict: true,
+                message: 'Server database has newer updates',
+                revision,
+                updated_at: updatedAt
+              })
+            );
+            return;
+          }
+
+          const newRevision = incomingRev || Date.now();
           const newUpdatedAt = new Date().toISOString();
 
           const payloadToSave = {

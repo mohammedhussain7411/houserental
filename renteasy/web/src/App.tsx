@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { rentEasyApi } from './services/rentEasyApi';
 import { Property, Tenant, RentCharge, Receipt, Landlord } from './types';
 
 // Modals
 import { ReceiptModal } from './components/ReceiptModal';
+import { EditReceiptModal } from './components/EditReceiptModal';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
 import { AddPropertyModal } from './components/AddPropertyModal';
 import { AddTenantModal } from './components/AddTenantModal';
@@ -12,6 +13,7 @@ import { GoogleDriveBackupModal } from './components/GoogleDriveBackupModal';
 import { MobileInstallModal } from './components/MobileInstallModal';
 import { MobileFrame } from './components/MobileFrame';
 import { LiveSyncModal } from './components/LiveSyncModal';
+import { RentalAgreementModal } from './components/RentalAgreementModal';
 
 // Pages
 import { DashboardPage } from './pages/DashboardPage';
@@ -57,7 +59,9 @@ export function App() {
   });
 
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
-  const [isMobileMode, setIsMobileMode] = useState<boolean>(false);
+  const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.innerWidth <= 768;
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isIconOnlySidebar, setIsIconOnlySidebar] = useState<boolean>(false);
 
@@ -72,6 +76,8 @@ export function App() {
   const [isGoogleDriveBackupOpen, setIsGoogleDriveBackupOpen] = useState<boolean>(false);
   const [isMobileInstallOpen, setIsMobileInstallOpen] = useState<boolean>(false);
   const [viewingReceipt, setViewingReceipt] = useState<Receipt | null>(null);
+  const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
+  const [rentalAgreementTenant, setRentalAgreementTenant] = useState<Tenant | null>(null);
 
   const [landlord, setLandlord] = useState<Landlord>(rentEasyApi.getLandlord());
   const [properties, setProperties] = useState<Property[]>(rentEasyApi.getProperties());
@@ -79,6 +85,28 @@ export function App() {
   const [syncStatus, setSyncStatus] = useState(rentEasyApi.getSyncStatus());
   const [isLiveSyncModalOpen, setIsLiveSyncModalOpen] = useState<boolean>(false);
   const [dashboardTick, setDashboardTick] = useState<number>(0);
+
+  // Compute initials dynamically based on landlord's name or logged-in username
+  const userInitials = useMemo(() => {
+    const name = landlord.name;
+    if (name && name.trim() && name.trim() !== 'My Properties') {
+      const parts = name.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    const email = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') : null;
+    if (email && email.includes('@')) {
+      const clean = email.split('@')[0].replace(/[._-]/g, ' ').trim();
+      const parts = clean.split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return clean.substring(0, 2).toUpperCase();
+    }
+    if (name && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      return (parts[0][0] + (parts[1] ? parts[1][0] : parts[0][1] || '')).toUpperCase();
+    }
+    return 'ME';
+  }, [landlord.name]);
 
   // Real-time synchronization listener for Phone <-> Web updates
   useEffect(() => {
@@ -146,7 +174,10 @@ export function App() {
             onOpenAddProperty={() => setIsAddPropertyOpen(true)}
             onOpenAddTenant={() => handleOpenAddTenant()}
             onViewReceipt={setViewingReceipt}
+            onEditReceipt={setEditingReceipt}
             onOpenGoogleDriveBackup={() => setIsGoogleDriveBackupOpen(true)}
+            onOpenLiveSync={() => setIsLiveSyncModalOpen(true)}
+            syncStatus={syncStatus}
           />
         );
       case 'calendar':
@@ -174,12 +205,18 @@ export function App() {
           <RentLedgerPage
             onOpenRecordPayment={handleOpenPayment}
             onViewReceipt={setViewingReceipt}
+            onEditReceipt={setEditingReceipt}
           />
         );
       case 'reminders':
         return <ReminderCentrePage />;
       case 'receipts':
-        return <ReceiptsReportsPage onViewReceipt={setViewingReceipt} />;
+        return (
+          <ReceiptsReportsPage
+            onViewReceipt={setViewingReceipt}
+            onEditReceipt={setEditingReceipt}
+          />
+        );
       default:
         return null;
     }
@@ -271,6 +308,23 @@ export function App() {
           </button>
 
           <button
+            className="nav-link"
+            onClick={() => {
+              const all = rentEasyApi.getTenants();
+              if (all.length > 0) {
+                setRentalAgreementTenant(all[0]);
+              } else {
+                alert('No tenants registered yet. Register a tenant first.');
+              }
+            }}
+            data-tooltip="Rental Agreements"
+            title="Rental Agreements (Owner, 1RK/1BHK/2BHK/3BHK, Painting Clause, Document Editor)"
+          >
+            <FileText size={19} className="nav-icon" color="#818cf8" />
+            {!isIconOnlySidebar && <span>Rental Agreements</span>}
+          </button>
+
+          <button
             className={`nav-link ${currentPage === 'ledger' ? 'active' : ''}`}
             onClick={() => setCurrentPage('ledger')}
             data-tooltip="Monthly Ledger"
@@ -344,12 +398,13 @@ export function App() {
                   justifyContent: 'center',
                   fontWeight: 700,
                   fontSize: '0.875rem',
+                  color: '#fff',
                   cursor: 'pointer'
                 }}
                 onClick={() => setIsSettingsOpen(true)}
-                title={`Landlord: ${landlord.name}`}
+                title={`Landlord: ${landlord.name || 'User Profile'}`}
               >
-                RS
+                {userInitials}
               </div>
               <button
                 className="btn btn-ghost btn-sm"
@@ -382,12 +437,12 @@ export function App() {
                 style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
                 onClick={() => setIsSettingsOpen(true)}
               >
-                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem' }}>
-                  RS
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.875rem', color: '#fff' }}>
+                  {userInitials}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#fff' }}>{landlord.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{landlord.company_name}</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#fff' }}>{landlord.name || 'Landlord'}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{landlord.company_name || 'My Properties'}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -490,10 +545,24 @@ export function App() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setIsSettingsOpen(true)}
-              title="System Settings & Audit Log"
+              title="System Settings & Profile"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <Settings size={16} />
-              <span>Settings</span>
+              <div style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                color: '#fff',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {userInitials}
+              </div>
+              <span>{landlord.name || 'Settings'}</span>
             </button>
 
             <button
@@ -514,6 +583,10 @@ export function App() {
             currentPage={currentPage}
             onNavigate={setCurrentPage}
             onOpenInstall={() => setIsMobileInstallOpen(true)}
+            onOpenLiveSync={() => setIsLiveSyncModalOpen(true)}
+            onOpenGoogleDriveBackup={() => setIsGoogleDriveBackupOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            syncStatus={syncStatus}
           >
             {renderCurrentPage()}
           </MobileFrame>
@@ -588,6 +661,43 @@ export function App() {
         <ReceiptModal
           receipt={viewingReceipt}
           onClose={() => setViewingReceipt(null)}
+          onEditReceipt={setEditingReceipt}
+        />
+      )}
+
+      {editingReceipt && (
+        <EditReceiptModal
+          receipt={editingReceipt}
+          isOpen={!!editingReceipt}
+          onClose={() => setEditingReceipt(null)}
+          onSuccess={(updatedReceipt) => {
+            setEditingReceipt(null);
+            setViewingReceipt(updatedReceipt);
+            setCharges(rentEasyApi.getRentCharges());
+            setProperties(rentEasyApi.getProperties());
+            setDashboardTick(t => t + 1);
+          }}
+          onDelete={(deletedId) => {
+            setEditingReceipt(null);
+            if (viewingReceipt && viewingReceipt.id === deletedId) {
+              setViewingReceipt(null);
+            }
+            setCharges(rentEasyApi.getRentCharges());
+            setProperties(rentEasyApi.getProperties());
+            setDashboardTick(t => t + 1);
+          }}
+        />
+      )}
+
+      {rentalAgreementTenant && (
+        <RentalAgreementModal
+          tenant={rentalAgreementTenant}
+          isOpen={!!rentalAgreementTenant}
+          properties={properties}
+          onClose={() => setRentalAgreementTenant(null)}
+          onAgreementSaved={() => {
+            setProperties(rentEasyApi.getProperties());
+          }}
         />
       )}
     </div>

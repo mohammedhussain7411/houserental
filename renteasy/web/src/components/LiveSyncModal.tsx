@@ -12,7 +12,10 @@ import {
   X,
   ExternalLink,
   Copy,
-  Check
+  Check,
+  ShieldAlert,
+  RotateCcw,
+  Globe
 } from 'lucide-react';
 
 interface LiveSyncModalProps {
@@ -25,9 +28,19 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [safetySnapshot, setSafetySnapshot] = useState(rentEasyApi.getSafetySnapshot());
+  const [isRestoringSafety, setIsRestoringSafety] = useState(false);
+
+  // Sync endpoint URL calculation
+  const currentOrigin = typeof window !== 'undefined' && window.location && !window.location.origin.startsWith('file:')
+    ? window.location.origin
+    : 'http://localhost:5174';
+  const phoneUrl = `${currentOrigin}/`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(phoneUrl)}`;
 
   useEffect(() => {
     if (!isOpen) return;
+    setSafetySnapshot(rentEasyApi.getSafetySnapshot());
     const unsub = rentEasyApi.subscribeSyncStatus(status => {
       setSyncStatus(status);
     });
@@ -36,19 +49,34 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
 
   if (!isOpen) return null;
 
-  const phoneUrl = 'http://192.168.0.104:5174/';
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(phoneUrl)}`;
-
   const handleManualSync = async () => {
     setIsManualSyncing(true);
     setMessage(null);
     try {
       await rentEasyApi.forceSyncNow();
-      setMessage('✅ Real-time synchronization completed! Both Phone and Web are in sync.');
+      setMessage('✅ Synchronization completed! Mobile and Laptop datasets are now synchronized.');
     } catch (e: any) {
       setMessage(`Sync failed: ${e?.message || 'Check network connection'}`);
     } finally {
       setIsManualSyncing(false);
+    }
+  };
+
+  const handleRestoreSafetySnapshot = () => {
+    if (!window.confirm('Restore your auto-saved safety snapshot? This will reload the state captured before the last change.')) {
+      return;
+    }
+    setIsRestoringSafety(true);
+    try {
+      const res = rentEasyApi.restoreSafetySnapshot();
+      if (res.success) {
+        setMessage('✅ Safety snapshot restored successfully! Your portfolio has been recovered.');
+        setSafetySnapshot(rentEasyApi.getSafetySnapshot());
+      } else {
+        setMessage(`Restore failed: ${res.message}`);
+      }
+    } finally {
+      setIsRestoringSafety(false);
     }
   };
 
@@ -60,7 +88,7 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" style={{ maxWidth: '580px' }} onClick={e => e.stopPropagation()}>
+      <div className="modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div style={{
@@ -77,9 +105,9 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
               <ArrowLeftRight size={20} />
             </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Phone & Web Real-Time Sync</h2>
+              <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>Mobile & Laptop Real-Time Sync</h2>
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-                Two-way live update system for mobile & desktop
+                Two-way live update system for phone & desktop with anti-erasure protection
               </p>
             </div>
           </div>
@@ -113,8 +141,8 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   {syncStatus.isLiveConnected
-                    ? 'Changes on Phone or Web automatically update both screens in real time'
-                    : 'Searching for local sync server at ' + phoneUrl}
+                    ? 'Changes on Mobile or Laptop automatically update both screens in real time'
+                    : `Sync endpoint: ${syncStatus.serverUrl}`}
                 </div>
               </div>
             </div>
@@ -143,6 +171,48 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
             </div>
           )}
 
+          {/* Safety Snapshot Card if available */}
+          {safetySnapshot && (
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              background: 'rgba(234, 179, 8, 0.08)',
+              border: '1px solid rgba(234, 179, 8, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShieldAlert size={18} color="#eab308" />
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#fef08a' }}>
+                    Auto-Safety Snapshot Saved
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Backup point from {new Date(safetySnapshot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({safetySnapshot.trigger})
+                  </div>
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleRestoreSafetySnapshot}
+                disabled={isRestoringSafety}
+                style={{
+                  fontSize: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#eab308',
+                  border: '1px solid rgba(234, 179, 8, 0.4)'
+                }}
+              >
+                <RotateCcw size={13} />
+                <span>Restore Snapshot</span>
+              </button>
+            </div>
+          )}
+
           {/* Sync Stats Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div style={{
@@ -152,9 +222,9 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
               border: '1px solid var(--border-subtle)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: '6px' }}>
-                <Monitor size={14} /> Desktop / Web
+                <Monitor size={14} /> Desktop / Laptop
               </div>
-              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#fff' }}>Connected & Active</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#fff' }}>Local & Cloud Active</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Revision #{syncStatus.revision || '0'}
               </div>
@@ -167,16 +237,18 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
               border: '1px solid var(--border-subtle)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: '6px' }}>
-                <Smartphone size={14} /> Phone / Mobile
+                <Smartphone size={14} /> Mobile Phone
               </div>
-              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#34d399' }}>Live Two-Way Linked</div>
+              <div style={{ fontSize: '0.92rem', fontWeight: 700, color: syncStatus.isLiveConnected ? '#34d399' : '#f59e0b' }}>
+                {syncStatus.isLiveConnected ? 'Live Two-Way Linked' : 'Ready to Connect'}
+              </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Last Synced: {syncStatus.lastSyncedAt || 'Just now'}
+                Last Synced: {syncStatus.lastSyncedAt || 'Awaiting update'}
               </div>
             </div>
           </div>
 
-          {/* Central Storage Info */}
+          {/* Anti-Erasure Guard Notice */}
           <div style={{
             padding: '12px 14px',
             borderRadius: '10px',
@@ -188,10 +260,10 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: '#e2e8f0' }}>
               <Database size={15} color="#818cf8" />
-              <span>Central Host Database</span>
+              <span>Anti-Erasure & Version Protection</span>
             </div>
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-              All records (tenants, properties, rent charges, receipts, payments) are centrally stored in <code style={{ color: '#a5b4fc', background: 'rgba(99, 102, 241, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>server-data/renteasy-db.json</code>.
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+              Your customized tenants and properties are protected: updates to app code will <strong>never</strong> overwrite your entered data with demo records. Automatic safety backups are captured before every synchronization.
             </div>
           </div>
 
@@ -223,11 +295,10 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>
-                Open on your Phone to test live sync:
+                Open on your Phone to sync:
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
-                1. Ensure your phone is connected to the same Wi-Fi.<br />
-                2. Scan this QR code or open browser at:
+                Scan this QR code with your phone camera or visit:
               </div>
               <div style={{
                 display: 'flex',
@@ -251,7 +322,7 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
                 </button>
               </div>
               <div style={{ fontSize: '0.72rem', color: '#10b981', fontWeight: 600 }}>
-                💡 Tip: Put or edit any tenant on phone, and watch this screen update automatically!
+                💡 Tip: Record a payment on phone, and watch this desktop screen update automatically!
               </div>
             </div>
           </div>

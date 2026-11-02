@@ -15,7 +15,9 @@ import {
   Cloud,
   ExternalLink,
   ShieldCheck,
-  Download
+  Download,
+  Trash2,
+  FolderSync
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -28,10 +30,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'backup' | 'messaging' | 'audit'>('profile');
   const [landlord, setLandlord] = useState<Landlord>(rentEasyApi.getLandlord());
   const [authCreds, setAuthCreds] = useState(rentEasyApi.getAuthCredentials());
+  const [gdriveSession, setGdriveSession] = useState(rentEasyApi.getGoogleDriveSession());
   const [passSuccess, setPassSuccess] = useState('');
   const [backupMsg, setBackupMsg] = useState('');
   const auditLogs = rentEasyApi.getAuditLogs();
   const lastBackup = rentEasyApi.getLastBackupTime();
+
+  const handleToggleAutoBackup = () => {
+    const nextVal = !gdriveSession.autoBackup;
+    rentEasyApi.updateGoogleDriveAutoBackup(nextVal);
+    setGdriveSession(prev => ({ ...prev, autoBackup: nextVal }));
+    if (nextVal) {
+      rentEasyApi.triggerAutoGoogleDriveBackup();
+      setBackupMsg('Automatic Google Drive cloud backup is now ACTIVE!');
+    } else {
+      setBackupMsg('Automatic Google Drive backup paused.');
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -318,14 +333,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
                   border: '1px solid rgba(66, 133, 244, 0.3)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px'
+                  gap: '14px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Cloud size={24} color="#4285F4" />
                     <div>
-                      <h4 style={{ margin: 0, fontSize: '0.98rem', color: '#fff' }}>Google Drive Cloud Sync</h4>
+                      <h4 style={{ margin: 0, fontSize: '0.98rem', color: '#fff' }}>Google Drive Cloud Sync & Auto-Backup</h4>
                       <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                         Safely archive and backup your rental books directly into Google Drive
                       </p>
@@ -334,6 +349,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
                   <span className="badge badge-paid" style={{ fontSize: '0.7rem' }}>
                     <ShieldCheck size={12} /> Google Cloud
                   </span>
+                </div>
+
+                {/* Connected Google Account & Auto-Backup Status Box */}
+                <div
+                  style={{
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    border: '1px solid rgba(255, 255, 255, 0.06)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>Google Account:</span>
+                      <strong style={{ fontSize: '0.85rem', color: gdriveSession.isConnected ? '#60a5fa' : 'var(--text-muted)' }}>
+                        {gdriveSession.email || 'Not connected (Sign in to connect)'}
+                      </strong>
+                    </div>
+                    {gdriveSession.isConnected && (
+                      <span className="badge badge-paid" style={{ fontSize: '0.68rem' }}>Connected</span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FolderSync size={16} color={gdriveSession.autoBackup ? '#34d399' : 'var(--text-dim)'} />
+                      <span style={{ fontSize: '0.8rem', color: '#fff' }}>
+                        Continuous Auto-Backup: <strong>{gdriveSession.autoBackup ? 'Enabled' : 'Disabled'}</strong>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`btn ${gdriveSession.autoBackup ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+                      style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                      onClick={handleToggleAutoBackup}
+                    >
+                      {gdriveSession.autoBackup ? 'Pause Auto-Backup' : 'Enable Auto-Backup'}
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
@@ -356,7 +414,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
                       const backup = rentEasyApi.getCompleteBackupData();
                       const nowStr = new Date().toISOString().split('T')[0];
                       await rentEasyApi.saveToGoogleDriveOrShare(`RentEasy_Full_Backup_${nowStr}.json`, JSON.stringify(backup, null, 2));
-                      setBackupMsg('Backup prepared & downloaded! Ready to upload to Google Drive.');
+                      setBackupMsg('Backup saved to Google Drive cloud & downloaded!');
                     }}
                   >
                     <Cloud size={14} /> Quick Save to Drive
@@ -386,6 +444,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
                     <ExternalLink size={14} />
                   </a>
                 </div>
+              </div>
+
+              {/* Danger Zone: Erase Demo Records */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#f87171' }}>Erase All Records & Start Fresh</h4>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                    Wipes all demo properties, tenants, and ledger transactions so you can enter your own real properties.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ background: '#ef4444', color: '#fff', border: 'none', whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to erase all records and start completely fresh? A safety backup will be saved first.')) {
+                      rentEasyApi.eraseAllDemoRecords();
+                      setBackupMsg('All records erased! System is now clean and ready for your real data.');
+                    }
+                  }}
+                >
+                  <Trash2 size={14} /> Erase Demo Records
+                </button>
               </div>
             </div>
           )}

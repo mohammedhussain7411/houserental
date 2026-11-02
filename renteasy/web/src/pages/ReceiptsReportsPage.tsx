@@ -11,17 +11,29 @@ import {
   TrendingUp,
   FileSpreadsheet,
   IndianRupee,
-  ExternalLink
+  ExternalLink,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 
 interface ReceiptsReportsPageProps {
   onViewReceipt: (receipt: Receipt) => void;
+  onEditReceipt?: (receipt: Receipt) => void;
 }
 
-export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onViewReceipt }) => {
+export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onViewReceipt, onEditReceipt }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const receipts = rentEasyApi.getReceipts();
+  const [receipts, setReceipts] = useState<Receipt[]>(rentEasyApi.getReceipts());
   const summary = rentEasyApi.getDashboardSummary('2026-10');
+
+  // Real-time synchronization listener
+  React.useEffect(() => {
+    const handleSync = () => {
+      setReceipts(rentEasyApi.getReceipts());
+    };
+    window.addEventListener('renteasy_sync', handleSync);
+    return () => window.removeEventListener('renteasy_sync', handleSync);
+  }, []);
 
   const filtered = receipts.filter(r =>
     r.receipt_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -178,6 +190,24 @@ export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onView
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: '6px' }}>
+                      {onEditReceipt && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          title="Edit Payment Receipt Details"
+                          style={{
+                            color: '#38bdf8',
+                            borderColor: 'rgba(56, 189, 248, 0.4)',
+                            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          onClick={() => onEditReceipt(r)}
+                        >
+                          <Pencil size={12} />
+                          <span>Edit</span>
+                        </button>
+                      )}
                       <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => onViewReceipt(r)}

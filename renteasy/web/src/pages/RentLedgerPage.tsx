@@ -26,11 +26,13 @@ import { RentCalendarEvent } from '../types';
 interface RentLedgerPageProps {
   onOpenRecordPayment: (charge?: RentCharge) => void;
   onViewReceipt: (receipt: Receipt) => void;
+  onEditReceipt?: (receipt: Receipt) => void;
 }
 
 export const RentLedgerPage: React.FC<RentLedgerPageProps> = ({
   onOpenRecordPayment,
-  onViewReceipt
+  onViewReceipt,
+  onEditReceipt
 }) => {
   const presentMonth = new Date().toISOString().substring(0, 7);
   const [selectedMonth, setSelectedMonth] = useState(presentMonth || '2026-10');
@@ -281,7 +283,7 @@ export const RentLedgerPage: React.FC<RentLedgerPageProps> = ({
                           <>
                             <button
                               className="btn btn-secondary btn-sm"
-                              title="Edit Payment (Date, Amount, Channel, Reference)"
+                              title="Edit Payment Receipt (Date, Amount, Channel, Reference)"
                               style={{
                                 color: '#38bdf8',
                                 borderColor: 'rgba(56, 189, 248, 0.4)',
@@ -291,8 +293,12 @@ export const RentLedgerPage: React.FC<RentLedgerPageProps> = ({
                                 gap: '3px'
                               }}
                               onClick={() => {
-                                setEditingPayment(linkedPayment);
-                                setEditingCharge(c);
+                                if (onEditReceipt && linkedReceipt) {
+                                  onEditReceipt(linkedReceipt);
+                                } else {
+                                  setEditingPayment(linkedPayment);
+                                  setEditingCharge(c);
+                                }
                               }}
                             >
                               <Pencil size={13} />

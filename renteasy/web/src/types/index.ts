@@ -247,6 +247,69 @@ export interface RentEasyBackupPayload {
     email: string;
     passwordPlain: string;
   };
+  property_owners?: PropertyOwner[];
+  rental_agreements?: RentalAgreement[];
+}
+
+export interface PropertyOwner {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  aadhaar_or_pan?: string;
+  address?: string;
+  is_default?: boolean;
+  created_at?: string;
+}
+
+export type HouseType = '1RK' | '1BHK' | '2BHK' | '3BHK' | '4BHK' | 'Commercial' | string;
+export type PaintingOption = 'with_painting' | 'without_painting';
+
+export interface RentalAgreement {
+  id: string;
+  tenant_id: string;
+  property_id?: string;
+  owner_id?: string;
+  
+  // Owner / Lessor details
+  owner_name: string;
+  owner_phone: string;
+  owner_address: string;
+  owner_id_number?: string;
+  
+  // Tenant / Lessee details
+  tenant_name: string;
+  tenant_phone: string;
+  tenant_aadhaar?: string;
+  tenant_permanent_address?: string;
+  
+  // Property details
+  property_name: string;
+  house_number: string;
+  property_address: string;
+  house_type: HouseType;
+  
+  // Financial terms
+  monthly_rent: number;
+  due_day: number;
+  deposit_amount: number;
+  
+  // Agreement duration
+  start_date: string; // YYYY-MM-DD
+  duration_months: number; // typically 11
+  notice_period_months: number; // typically 1
+  lock_in_months?: number;
+  
+  // Painting clause
+  painting_option: PaintingOption;
+  painting_amount: number; // e.g. 5000
+  
+  // Agreement custom editable text
+  agreement_text: string;
+  is_custom_edited?: boolean;
+  
+  created_at: string;
+  updated_at: string;
 }
 
 export interface GoogleDriveSession {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { rentEasyApi } from '../services/rentEasyApi';
+import { rentEasyApi, DeviceSyncStatus } from '../services/rentEasyApi';
 import { DashboardSummary, RentCharge, Receipt } from '../types';
 import {
   IndianRupee,
@@ -18,7 +18,8 @@ import {
   ArrowRight,
   Cloud,
   PhoneCall,
-  Pencil
+  Pencil,
+  RefreshCw
 } from 'lucide-react';
 import {
   BarChart,
@@ -37,7 +38,10 @@ interface DashboardPageProps {
   onOpenAddProperty: () => void;
   onOpenAddTenant: () => void;
   onViewReceipt: (receipt: Receipt) => void;
+  onEditReceipt?: (receipt: Receipt) => void;
   onOpenGoogleDriveBackup?: () => void;
+  onOpenLiveSync?: () => void;
+  syncStatus?: DeviceSyncStatus;
   refreshTrigger?: number;
 }
 
@@ -47,9 +51,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onOpenAddProperty,
   onOpenAddTenant,
   onViewReceipt,
+  onEditReceipt,
   onOpenGoogleDriveBackup,
+  onOpenLiveSync,
+  syncStatus,
   refreshTrigger = 0
 }) => {
+  const currentSyncStatus = syncStatus || rentEasyApi.getSyncStatus();
   // Dynamically determine current present month (YYYY-MM)
   const getPresentMonth = () => {
     const d = new Date();
@@ -158,6 +166,95 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <button className="btn btn-primary" onClick={() => onOpenRecordPayment()}>
             <CreditCard size={16} /> Record Payment
           </button>
+        </div>
+      </div>
+
+      {/* Quick Phone & Cloud Synchronization Status Bar */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          background: 'linear-gradient(90deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '12px 18px',
+          boxShadow: '0 4px 14px rgba(0, 0, 0, 0.15)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: currentSyncStatus.isLiveConnected ? '#10b981' : '#f59e0b',
+              boxShadow: currentSyncStatus.isLiveConnected ? '0 0 10px #10b981' : 'none'
+            }}
+          />
+          <div>
+            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>{currentSyncStatus.isLiveConnected ? 'Phone & Central Web Synchronized' : 'Phone & Web Ready'}</span>
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  backgroundColor: currentSyncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                  color: currentSyncStatus.isLiveConnected ? '#34d399' : '#fbbf24',
+                  fontWeight: 600
+                }}
+              >
+                {currentSyncStatus.isLiveConnected ? 'Live 2-Way' : 'Local'}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              Last sync: {currentSyncStatus.lastSyncedAt || 'Ready to sync'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {onOpenLiveSync && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onOpenLiveSync}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.78rem',
+                borderColor: currentSyncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)'
+              }}
+            >
+              <RefreshCw
+                size={13}
+                style={{
+                  animation: currentSyncStatus.isSyncing ? 'spin 1s linear infinite' : 'none'
+                }}
+              />
+              <span>{currentSyncStatus.isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+            </button>
+          )}
+
+          {onOpenGoogleDriveBackup && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onOpenGoogleDriveBackup}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '0.78rem',
+                borderColor: 'rgba(66, 133, 244, 0.4)'
+              }}
+            >
+              <Cloud size={14} color="#4285F4" />
+              <span>Google Drive Login / Backup</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -457,9 +554,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     {new Date(r.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => onViewReceipt(r)}>
-                      View Receipt
-                    </button>
+                    <div style={{ display: 'inline-flex', gap: '6px' }}>
+                      {onEditReceipt && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          title="Edit Payment Receipt Details"
+                          style={{
+                            color: '#38bdf8',
+                            borderColor: 'rgba(56, 189, 248, 0.4)',
+                            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                          onClick={() => onEditReceipt(r)}
+                        >
+                          <Pencil size={12} />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                      <button className="btn btn-secondary btn-sm" onClick={() => onViewReceipt(r)}>
+                        View Receipt
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

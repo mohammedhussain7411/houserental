@@ -19,353 +19,75 @@ import {
   RentChargeStatus,
   RentEasyBackupPayload,
   GoogleDriveSession,
-  GoogleDriveCloudBackup
+  GoogleDriveCloudBackup,
+  PropertyOwner,
+  RentalAgreement,
+  HouseType,
+  PaintingOption
 } from '../types';
+
+export function numberToIndianWords(num: number): string {
+  if (!num || isNaN(num) || num <= 0) return 'Zero';
+
+  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+    'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  function convertTwoDigits(n: number): string {
+    if (n < 20) return ones[n];
+    const unit = n % 10;
+    return tens[Math.floor(n / 10)] + (unit ? ' ' + ones[unit] : '');
+  }
+
+  function convertThreeDigits(n: number): string {
+    const hundred = Math.floor(n / 100);
+    const rest = n % 100;
+    if (hundred && rest) {
+      return ones[hundred] + ' Hundred ' + convertTwoDigits(rest);
+    } else if (hundred) {
+      return ones[hundred] + ' Hundred';
+    }
+    return convertTwoDigits(rest);
+  }
+
+  let n = Math.floor(num);
+  let words = '';
+
+  const crore = Math.floor(n / 10000000);
+  n %= 10000000;
+  const lakh = Math.floor(n / 100000);
+  n %= 100000;
+  const thousand = Math.floor(n / 1000);
+  n %= 1000;
+  const remaining = n;
+
+  if (crore) words += convertTwoDigits(crore) + ' Crore ';
+  if (lakh) words += convertTwoDigits(lakh) + ' Lakh ';
+  if (thousand) words += convertTwoDigits(thousand) + ' Thousand ';
+  if (remaining) words += convertThreeDigits(remaining) + ' ';
+
+  return words.trim();
+}
 
 const STORAGE_KEY_PREFIX = 'renteasy_v3_';
 
 const initialLandlord: Landlord = {
   id: 'll-001',
-  name: 'Rajesh Sharma',
-  email: 'rajesh.sharma@renteasy.app',
-  phone: '+91 98765 43210',
-  company_name: 'Sharma Estates & Prime Rentals',
-  upi_id: 'sharma.rentals@okhdfcbank',
+  name: 'My Properties',
+  email: 'landlord@renteasy.app',
+  phone: '',
+  company_name: 'RentEasy Portfolio',
+  upi_id: '',
   timezone: 'Asia/Kolkata'
 };
 
-const initialProperties: Property[] = [
-  {
-    id: 'prop-101',
-    landlord_id: 'll-001',
-    name: 'Sunrise Residency',
-    address: '12th Main, 4th Cross, Indiranagar',
-    city: 'Bengaluru',
-    pincode: '560038',
-    property_type: '2BHK',
-    default_rent: 26000,
-    status: 'occupied',
-    total_units: 4,
-    units: [
-      { id: 'u-101-1', property_id: 'prop-101', unit_number: 'Flat 101', property_type: '2BHK', default_rent: 26000, status: 'vacant' },
-      { id: 'u-101-2', property_id: 'prop-101', unit_number: 'Flat 201', property_type: '2BHK', default_rent: 26000, status: 'vacant' },
-      { id: 'u-101-3', property_id: 'prop-101', unit_number: 'Flat 301', property_type: '2BHK', default_rent: 26000, status: 'vacant' },
-      { id: 'u-101-4', property_id: 'prop-101', unit_number: 'Flat 302', property_type: '2BHK', default_rent: 26000, status: 'occupied', current_tenant_name: 'Vikramaditya Roy', current_lease_id: 'lease-001' }
-    ],
-    unit_number: 'Flat 302',
-    current_tenant_name: 'Vikramaditya Roy',
-    current_lease_id: 'lease-001',
-    created_at: '2026-01-10T09:00:00Z'
-  },
-  {
-    id: 'prop-102',
-    landlord_id: 'll-001',
-    name: 'Greenwood Heights',
-    address: 'Near Wipro Circle, Sarjapur Road',
-    city: 'Bengaluru',
-    pincode: '560035',
-    property_type: '3BHK Villa',
-    default_rent: 45000,
-    status: 'occupied',
-    total_units: 3,
-    units: [
-      { id: 'u-102-1', property_id: 'prop-102', unit_number: 'Villa 12', property_type: '3BHK Villa', default_rent: 45000, status: 'vacant' },
-      { id: 'u-102-2', property_id: 'prop-102', unit_number: 'Villa 14', property_type: '3BHK Villa', default_rent: 45000, status: 'occupied', current_tenant_name: 'Priya Venkat', current_lease_id: 'lease-002' },
-      { id: 'u-102-3', property_id: 'prop-102', unit_number: 'Villa 16', property_type: '3BHK Villa', default_rent: 45000, status: 'vacant' }
-    ],
-    unit_number: 'Villa 14',
-    current_tenant_name: 'Priya Venkat',
-    current_lease_id: 'lease-002',
-    created_at: '2026-02-15T10:00:00Z'
-  },
-  {
-    id: 'prop-103',
-    landlord_id: 'll-001',
-    name: 'Palm Meadows Annex',
-    address: 'Opposite Tech Park, Whitefield',
-    city: 'Bengaluru',
-    pincode: '560066',
-    property_type: '1BHK Studio',
-    default_rent: 16500,
-    status: 'vacant',
-    total_units: 4,
-    units: [
-      { id: 'u-103-1', property_id: 'prop-103', unit_number: 'Studio B1', property_type: '1BHK Studio', default_rent: 16500, status: 'vacant' },
-      { id: 'u-103-2', property_id: 'prop-103', unit_number: 'Studio B2', property_type: '1BHK Studio', default_rent: 16500, status: 'vacant' },
-      { id: 'u-103-3', property_id: 'prop-103', unit_number: 'Studio B3', property_type: '1BHK Studio', default_rent: 16500, status: 'vacant' },
-      { id: 'u-103-4', property_id: 'prop-103', unit_number: 'Studio B4', property_type: '1BHK Studio', default_rent: 16500, status: 'vacant' }
-    ],
-    unit_number: 'Studio B4',
-    current_tenant_name: null,
-    current_lease_id: null,
-    created_at: '2026-03-01T11:00:00Z'
-  },
-  {
-    id: 'prop-104',
-    landlord_id: 'll-001',
-    name: 'Koramangala Regal Court',
-    address: '80 Feet Road, 4th Block, Koramangala',
-    city: 'Bengaluru',
-    pincode: '560034',
-    property_type: '2BHK',
-    default_rent: 32000,
-    status: 'occupied',
-    total_units: 2,
-    units: [
-      { id: 'u-104-1', property_id: 'prop-104', unit_number: 'Flat 101', property_type: '2BHK', default_rent: 32000, status: 'occupied', current_tenant_name: 'Arjun Mehta', current_lease_id: 'lease-003' },
-      { id: 'u-104-2', property_id: 'prop-104', unit_number: 'Flat 102', property_type: '2BHK', default_rent: 32000, status: 'vacant' }
-    ],
-    unit_number: 'Flat 101',
-    current_tenant_name: 'Arjun Mehta',
-    current_lease_id: 'lease-003',
-    created_at: '2026-04-10T11:00:00Z'
-  }
-];
-
-const initialTenants: Tenant[] = [
-  {
-    id: 'ten-001',
-    landlord_id: 'll-001',
-    name: 'Vikramaditya Roy',
-    phone: '+919845012345',
-    whatsapp_number: '+919845012345',
-    email: 'vikram.roy@techcorp.in',
-    emergency_contact: 'Ananya Roy (+919845099999)',
-    status: 'active',
-    linked_property_name: 'Sunrise Residency',
-    linked_unit_number: 'Flat 302',
-    house_number: 'Flat 302',
-    date: '2026-01-10',
-    active_lease_id: 'lease-001',
-    monthly_rent: 26000,
-    due_day: 5, // Auto-bills on 5th of every month
-    deposit_amount: 100000,
-    deposit_paid: true,
-    aadhaar_number: '4829 1928 3948',
-    permanent_address: 'Plot 42, Lakeview Road, Indiranagar, Bengaluru',
-    initial_balance: 0,
-    balance_amount: 12500, // 27500 total - 15000 paid = 12500
-    whatsapp_enabled: true,
-    sms_enabled: true,
-    created_at: '2026-01-10T09:30:00Z'
-  },
-  {
-    id: 'ten-002',
-    landlord_id: 'll-001',
-    name: 'Priya Venkat',
-    phone: '+919988776655',
-    whatsapp_number: '+919988776655',
-    email: 'priya.v@designstudio.io',
-    emergency_contact: 'Venkat S (+919988771122)',
-    status: 'active',
-    linked_property_name: 'Greenwood Heights',
-    linked_unit_number: 'Villa 14',
-    house_number: 'Villa 14',
-    date: '2026-02-15',
-    active_lease_id: 'lease-002',
-    monthly_rent: 45000,
-    due_day: 7, // Auto-bills on 7th of every month
-    deposit_amount: 200000,
-    deposit_paid: true,
-    aadhaar_number: '8291 0394 8192',
-    permanent_address: '14 Royal Palm Enclave, Sarjapur, Bengaluru',
-    initial_balance: 0,
-    balance_amount: 45000, // Unpaid October rent
-    whatsapp_enabled: true,
-    sms_enabled: true,
-    created_at: '2026-02-15T10:30:00Z'
-  },
-  {
-    id: 'ten-003',
-    landlord_id: 'll-001',
-    name: 'Arjun Mehta',
-    phone: '+919731234567',
-    whatsapp_number: '+919731234567',
-    email: 'arjun.mehta@venturecap.com',
-    emergency_contact: 'Rohan Mehta (+919731299999)',
-    status: 'active',
-    linked_property_name: 'Koramangala Regal Court',
-    linked_unit_number: 'Flat 101',
-    house_number: 'Flat 101',
-    date: '2026-04-10',
-    active_lease_id: 'lease-003',
-    monthly_rent: 32000,
-    due_day: 10, // Auto-bills on 10th of every month
-    deposit_amount: 150000,
-    deposit_paid: true,
-    aadhaar_number: '6381 9283 0192',
-    permanent_address: '22/B 4th Cross, Koramangala 4th Block, Bengaluru',
-    initial_balance: 0,
-    balance_amount: 0, // Fully settled for October
-    whatsapp_enabled: true,
-    sms_enabled: false,
-    created_at: '2026-04-10T11:30:00Z'
-  }
-];
-
-const initialRentCharges: RentCharge[] = [
-  {
-    id: 'chg-001',
-    lease_id: 'lease-001',
-    property_name: 'Sunrise Residency',
-    unit_number: 'Flat 302',
-    tenant_name: 'Vikramaditya Roy',
-    tenant_phone: '+919845012345',
-    period_month: '2026-10',
-    rent_amount: 26000,
-    other_charges: 1500, // Society maintenance
-    total_due: 27500,
-    amount_paid: 15000,
-    outstanding_balance: 12500,
-    due_date: '2026-10-05',
-    status: 'partially_paid',
-    created_at: '2026-10-01T00:00:00Z'
-  },
-  {
-    id: 'chg-002',
-    lease_id: 'lease-002',
-    property_name: 'Greenwood Heights',
-    unit_number: 'Villa 14',
-    tenant_name: 'Priya Venkat',
-    tenant_phone: '+919988776655',
-    period_month: '2026-10',
-    rent_amount: 45000,
-    other_charges: 0,
-    total_due: 45000,
-    amount_paid: 0,
-    outstanding_balance: 45000,
-    due_date: '2026-10-07',
-    status: 'overdue',
-    created_at: '2026-10-01T00:00:00Z'
-  },
-  {
-    id: 'chg-003',
-    lease_id: 'lease-003',
-    property_name: 'Koramangala Regal Court',
-    unit_number: 'Flat 101',
-    tenant_name: 'Arjun Mehta',
-    tenant_phone: '+919731234567',
-    period_month: '2026-10',
-    rent_amount: 32000,
-    other_charges: 2000, // Water & maintenance
-    total_due: 34000,
-    amount_paid: 34000,
-    outstanding_balance: 0,
-    due_date: '2026-10-10',
-    status: 'paid',
-    created_at: '2026-10-01T00:00:00Z'
-  }
-];
-
-const initialPayments: Payment[] = [
-  {
-    id: 'pay-001',
-    lease_id: 'lease-001',
-    amount: 15000,
-    payment_date: '2026-10-04',
-    method: 'upi',
-    reference: 'UPI/428719284729/HDFC',
-    idempotency_key: 'idemp-001-init',
-    is_reversed: false,
-    receipt_id: 'rec-001',
-    receipt_number: 'REC-2026-0001',
-    allocated_charge_id: 'chg-001',
-    remaining_charge_balance: 12500,
-    notes: 'Advance part payment via GPay UPI',
-    created_at: '2026-10-04T14:32:00Z'
-  },
-  {
-    id: 'pay-002',
-    lease_id: 'lease-003',
-    amount: 34000,
-    payment_date: '2026-10-08',
-    method: 'bank_transfer',
-    reference: 'NEFT/HDFC0001928/RENT',
-    idempotency_key: 'idemp-002-init',
-    is_reversed: false,
-    receipt_id: 'rec-002',
-    receipt_number: 'REC-2026-0002',
-    allocated_charge_id: 'chg-003',
-    remaining_charge_balance: 0,
-    notes: 'Full payment via Net Banking',
-    created_at: '2026-10-08T11:15:00Z'
-  }
-];
-
-const initialReceipts: Receipt[] = [
-  {
-    id: 'rec-001',
-    payment_id: 'pay-001',
-    receipt_number: 'REC-2026-0001',
-    issued_at: '2026-10-04T14:32:00Z',
-    tenant_name: 'Vikramaditya Roy',
-    property_name: 'Sunrise Residency',
-    unit_number: 'Flat 302',
-    period_month: '2026-10',
-    amount_paid: 15000,
-    payment_method: 'upi',
-    reference: 'UPI/428719284729/HDFC',
-    outstanding_balance: 12500,
-    verification_hash: '9A7F4B2C81DE90'
-  },
-  {
-    id: 'rec-002',
-    payment_id: 'pay-002',
-    receipt_number: 'REC-2026-0002',
-    issued_at: '2026-10-08T11:15:00Z',
-    tenant_name: 'Arjun Mehta',
-    property_name: 'Koramangala Regal Court',
-    unit_number: 'Flat 101',
-    period_month: '2026-10',
-    amount_paid: 34000,
-    payment_method: 'bank_transfer',
-    reference: 'NEFT/HDFC0001928/RENT',
-    outstanding_balance: 0,
-    verification_hash: '6F1C83D4E72B90'
-  }
-];
-
-const initialMessageJobs: MessageJob[] = [
-  {
-    id: 'job-001',
-    tenant_id: 'ten-001',
-    tenant_name: 'Vikramaditya Roy',
-    tenant_phone: '+919845012345',
-    property_name: 'Sunrise Residency (Flat 302)',
-    rent_charge_id: 'chg-001',
-    type: 'payment_receipt',
-    channel: 'whatsapp',
-    scheduled_at: '2026-10-04T14:33:00Z',
-    status: 'delivered',
-    retry_count: 0,
-    created_at: '2026-10-04T14:32:05Z'
-  },
-  {
-    id: 'job-002',
-    tenant_id: 'ten-002',
-    tenant_name: 'Priya Venkat',
-    tenant_phone: '+919988776655',
-    property_name: 'Greenwood Heights (Villa 14)',
-    rent_charge_id: 'chg-002',
-    type: 'overdue_reminder',
-    channel: 'whatsapp',
-    scheduled_at: '2026-10-10T10:00:00Z',
-    status: 'delivered',
-    retry_count: 0,
-    created_at: '2026-10-10T10:00:00Z'
-  }
-];
-
-const initialAuditLogs: AuditLog[] = [
-  {
-    id: 'aud-001',
-    action: 'payment_recorded',
-    entity_type: 'payment',
-    entity_id: 'pay-001',
-    details: 'Payment REC-2026-0001 of ₹15,000 recorded. Deducted from Flat 302 balance. Remaining: ₹12,500. Receipt dispatched via WhatsApp & SMS.',
-    created_at: '2026-10-04T14:32:00Z'
-  }
-];
+const initialProperties: Property[] = [];
+const initialTenants: Tenant[] = [];
+const initialRentCharges: RentCharge[] = [];
+const initialPayments: Payment[] = [];
+const initialReceipts: Receipt[] = [];
+const initialMessageJobs: MessageJob[] = [];
+const initialAuditLogs: AuditLog[] = [];
 
 // LocalStorage & Real-Time Cross-Device Sync helpers
 export interface DeviceSyncStatus {
@@ -381,11 +103,357 @@ export interface DeviceSyncStatus {
 
 const CLIENT_INSTANCE_ID = 'device_' + Math.random().toString(36).substring(2, 8) + '_' + Date.now();
 
+function autoMigrateStorageKeys(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const currentProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
+    if (!currentProps) {
+      const pastPrefixes = ['renteasy_v2_', 'renteasy_v1_', 'renteasy_'];
+      for (const prefix of pastPrefixes) {
+        const oldProps = localStorage.getItem(prefix + 'properties');
+        if (oldProps) {
+          console.log(`[RentEasy Migration] Found existing data under prefix "${prefix}". Migrating to ${STORAGE_KEY_PREFIX}...`);
+          const keys = ['landlord', 'properties', 'tenants', 'rent_charges', 'payments', 'receipts', 'message_jobs', 'audit_logs', 'auth_credentials'];
+          for (const k of keys) {
+            const val = localStorage.getItem(prefix + k);
+            if (val && !localStorage.getItem(STORAGE_KEY_PREFIX + k)) {
+              localStorage.setItem(STORAGE_KEY_PREFIX + k, val);
+            }
+          }
+          break;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[RentEasy Migration] Notice during auto-migration:', err);
+  }
+}
+function autoMigratePortfolioUnitFormat(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const MIGRATION_KEY = 'renteasy_unit_prefix_migration_v6';
+    const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
+    const rawTenants = localStorage.getItem(STORAGE_KEY_PREFIX + 'tenants');
+    if (!rawProps || !rawTenants) return;
+
+    let properties = JSON.parse(rawProps);
+    let tenants = JSON.parse(rawTenants);
+    if (!Array.isArray(properties) || properties.length === 0) return;
+
+    const alreadyDone = localStorage.getItem(MIGRATION_KEY) === 'done';
+    const propA = properties.find((p: any) => (p.name || '').trim().toUpperCase() === 'A');
+    const propC = properties.find((p: any) => (p.name || '').trim().toUpperCase() === 'C');
+
+    // Check if migration is strictly needed
+    const needsUnitFix = properties.some((p: any) =>
+      (p.units || []).some((u: any) => !u.unit_number || /^House\s*#?\s*\d+/i.test(u.unit_number) || /^\d+$/.test(u.unit_number))
+    );
+    const needsTenantFix = tenants.some((t: any) =>
+      !t.house_number ||
+      /^House\s*#?\s*\d+/i.test(t.house_number) ||
+      /^\d+$/.test(t.house_number) ||
+      (t.name === 'Gufran' && (t.linked_property_name !== 'A' || t.house_number !== 'A-16')) ||
+      (t.name === 'Samurudin' && (t.linked_property_name !== 'C' || t.house_number !== 'C-16')) ||
+      (t.name === 'Mubarak' && t.monthly_rent === 3100 && (t.linked_property_name !== 'A' || t.house_number !== 'A-17'))
+    );
+    const gufranMissing = !tenants.some((t: any) => t.name === 'Gufran');
+
+    if (alreadyDone && !needsUnitFix && !needsTenantFix && !gufranMissing) {
+      return;
+    }
+
+    console.log('[RentEasy Migration] Applying comprehensive unit prefix (A-1..A-17, C-1..C-16) and tenant property isolation...');
+
+    // 1. Properties & Units
+    if (propA) {
+      const namesA = [
+        'Saddam Hussain', 'Rihana', 'Bhanumathy', 'Mohammed Shamsad', 'Murtaza',
+        'Hyder Ali', 'Sawood Ahmed', 'Mubeena', 'Mohammed Waseem', 'Imtiyaz',
+        'Mohammed Abdul', 'Mohammed Noushad', 'Saddam Hussain', 'Abdad', 'Fathima',
+        'Gufran', 'Mubarak'
+      ];
+      const rentA = [4300, 5500, 5800, 4000, 2800, 2800, 5000, 3900, 2800, 2800, 2600, 3000, 3300, 3300, 3600, 3200, 3100];
+      const leasesA = [
+        'lease-1793016323583-ten-1793015167436',
+        'lease-1793016323583-ten-1793015222383',
+        'lease-1793016323582-ten-1793015271984',
+        'lease-1793016323582-ten-1793015340138',
+        'lease-1793016323582-ten-1793015424005',
+        'lease-1793016323582-ten-1793015486724',
+        'lease-1793016323582-ten-1793015696549',
+        'lease-1793016323582-ten-1793015818564',
+        'lease-1793016323582-ten-1793015900297',
+        'lease-1793016323582-ten-1793015982323',
+        'lease-1793021922682',
+        'lease-1793022252265',
+        'lease-1793023209299',
+        'lease-1793022418977',
+        'lease-1793027659567',
+        'lease-1793022802749',
+        'lease-1793023076106'
+      ];
+      propA.units = [];
+      for (let i = 1; i <= 17; i++) {
+        propA.units.push({
+          id: `u-prop-1793015020917-${i}`,
+          property_id: propA.id,
+          unit_number: `A-${i}`,
+          property_type: 'Independent House',
+          default_rent: rentA[i - 1],
+          status: 'occupied',
+          current_tenant_name: namesA[i - 1],
+          current_lease_id: leasesA[i - 1]
+        });
+      }
+    }
+
+    if (propC) {
+      const namesC = [
+        'Tasleem', 'Waheed', 'Faizulla', 'Meena Naik', 'Mujaheed Alam',
+        'Simran', 'Nayeem', 'Mohammed Jabeer', 'Javeed', 'Mubarak',
+        'Subash', 'Rakee', 'Irfan', 'Ayaz', 'Adil', 'Samurudin'
+      ];
+      const rentC = [4000, 3000, 3350, 3800, 3100, 4750, 4800, 6000, 6000, 5300, 4800, 5900, 6000, 4500, 6200, 6500];
+      const leasesC = [
+        'lease-1793029430153',
+        'lease-1793029508936',
+        'lease-1793029869086',
+        'lease-1793030004181',
+        'lease-1793030944328',
+        'lease-1793031020581',
+        'lease-1793031401846',
+        'lease-1793031482541',
+        'lease-1793031626463',
+        'lease-1793031744739',
+        'lease-1793031898966',
+        'lease-1793032007884',
+        'lease-1793032110933',
+        'lease-1793032258647',
+        'lease-1793032367848',
+        'lease-1793040639316'
+      ];
+      propC.units = [];
+      for (let i = 1; i <= 16; i++) {
+        propC.units.push({
+          id: `u-prop-1793029282595-${i}`,
+          property_id: propC.id,
+          unit_number: `C-${i}`,
+          property_type: 'Independent House',
+          default_rent: rentC[i - 1],
+          status: 'occupied',
+          current_tenant_name: namesC[i - 1],
+          current_lease_id: leasesC[i - 1]
+        });
+      }
+    }
+
+    // Format any other properties
+    for (const p of properties) {
+      if (p !== propA && p !== propC && Array.isArray(p.units)) {
+        const pInitial = (p.name || 'H').trim().charAt(0).toUpperCase();
+        p.units.forEach((u: any, idx: number) => {
+          const num = (u.unit_number || '').replace(/[^0-9]/g, '') || String(idx + 1);
+          u.unit_number = `${pInitial}-${num}`;
+        });
+      }
+    }
+
+    // 2. Tenants
+    const cleanedTenants: any[] = [];
+    for (const t of tenants) {
+      if (t.name === 'Gufran') {
+        t.linked_property_name = 'A';
+        t.property_id = propA?.id || t.property_id;
+        t.house_number = 'A-16';
+        t.linked_unit_number = 'A-16';
+        t.monthly_rent = 3200;
+        t.phone = t.phone || '+91 6201817425';
+        t.active_lease_id = 'lease-1793022802749';
+        t.status = 'active';
+      } else if (t.name === 'Samurudin') {
+        t.linked_property_name = 'C';
+        t.property_id = propC?.id || t.property_id;
+        t.house_number = 'C-16';
+        t.linked_unit_number = 'C-16';
+        t.monthly_rent = 6500;
+        t.phone = t.phone || '+91 9380623282';
+        t.active_lease_id = 'lease-1793040639316';
+        t.status = 'active';
+      } else if (t.name === 'Mubarak' && (t.phone === '+91 9739101043' || t.monthly_rent === 3100 || (t.house_number && t.house_number.includes('17')))) {
+        t.linked_property_name = 'A';
+        t.property_id = propA?.id || t.property_id;
+        t.house_number = 'A-17';
+        t.linked_unit_number = 'A-17';
+        t.monthly_rent = 3100;
+        t.phone = '+91 9739101043';
+        t.active_lease_id = 'lease-1793023076106';
+        t.status = 'active';
+      } else if (t.name === 'Mubarak' && (t.phone === '+91 8147724873' || t.monthly_rent === 5300 || (t.house_number && t.house_number.includes('10')))) {
+        t.linked_property_name = 'C';
+        t.property_id = propC?.id || t.property_id;
+        t.house_number = 'C-10';
+        t.linked_unit_number = 'C-10';
+        t.monthly_rent = 5300;
+        t.phone = '+91 8147724873';
+        t.active_lease_id = 'lease-1793031744739';
+        t.status = 'active';
+      } else {
+        const pName = (t.linked_property_name || '').trim().toUpperCase();
+        const initial = pName.startsWith('C') ? 'C' : 'A';
+        const digits = (t.house_number || '').replace(/[^0-9]/g, '');
+        if (digits) {
+          t.house_number = `${initial}-${digits}`;
+          t.linked_unit_number = t.house_number;
+        }
+        if (pName.startsWith('C')) {
+          t.linked_property_name = 'C';
+          if (propC) t.property_id = propC.id;
+        } else {
+          t.linked_property_name = 'A';
+          if (propA) t.property_id = propA.id;
+        }
+      }
+      cleanedTenants.push(t);
+    }
+
+    // Ensure Gufran is present
+    if (!cleanedTenants.some(t => t.name === 'Gufran')) {
+      cleanedTenants.push({
+        id: 'ten-1793022802750-gufran',
+        property_id: propA?.id || 'prop-1793015020917',
+        name: 'Gufran',
+        phone: '+91 6201817425',
+        house_number: 'A-16',
+        linked_unit_number: 'A-16',
+        linked_property_name: 'A',
+        date: '2026-10-26',
+        monthly_rent: 3200,
+        due_day: 5,
+        deposit_amount: 1000,
+        deposit_paid: true,
+        status: 'active',
+        active_lease_id: 'lease-1793022802749',
+        balance_amount: 3200,
+        whatsapp_enabled: true,
+        sms_enabled: true
+      });
+    }
+
+    // 3. Rent Charges
+    const rawCharges = localStorage.getItem(STORAGE_KEY_PREFIX + 'rent_charges');
+    if (rawCharges) {
+      try {
+        const charges = JSON.parse(rawCharges);
+        if (Array.isArray(charges)) {
+          charges.forEach((c: any) => {
+            if (c.tenant_name === 'Gufran') {
+              c.property_name = 'A';
+              c.unit_number = 'A-16';
+              c.rent_amount = 3200;
+            } else if (c.tenant_name === 'Samurudin') {
+              c.property_name = 'C';
+              c.unit_number = 'C-16';
+              c.rent_amount = 6500;
+            } else if (c.tenant_name === 'Mubarak' && (c.tenant_phone === '+91 9739101043' || c.rent_amount === 3100)) {
+              c.property_name = 'A';
+              c.unit_number = 'A-17';
+              c.rent_amount = 3100;
+            } else if (c.tenant_name === 'Mubarak' && (c.tenant_phone === '+91 8147724873' || c.rent_amount === 5300)) {
+              c.property_name = 'C';
+              c.unit_number = 'C-10';
+              c.rent_amount = 5300;
+            } else {
+              const pName = (c.property_name || 'A').trim().toUpperCase();
+              const prefix = pName.startsWith('C') ? 'C-' : 'A-';
+              const digits = (c.unit_number || '').replace(/[^0-9]/g, '');
+              if (digits) c.unit_number = prefix + digits;
+            }
+          });
+          localStorage.setItem(STORAGE_KEY_PREFIX + 'rent_charges', JSON.stringify(charges));
+        }
+      } catch (e) {}
+    }
+
+    // 4. Receipts
+    const rawReceipts = localStorage.getItem(STORAGE_KEY_PREFIX + 'receipts');
+    if (rawReceipts) {
+      try {
+        const receipts = JSON.parse(rawReceipts);
+        if (Array.isArray(receipts)) {
+          receipts.forEach((r: any) => {
+            if (r.tenant_name === 'Samurudin') {
+              r.property_name = 'C';
+              r.unit_number = 'C-16';
+            } else if (r.tenant_name === 'Gufran') {
+              r.property_name = 'A';
+              r.unit_number = 'A-16';
+            } else {
+              const pName = (r.property_name || 'A').trim().toUpperCase();
+              const prefix = pName.startsWith('C') ? 'C-' : 'A-';
+              const digits = (r.unit_number || '').replace(/[^0-9]/g, '');
+              if (digits) r.unit_number = prefix + digits;
+            }
+          });
+          localStorage.setItem(STORAGE_KEY_PREFIX + 'receipts', JSON.stringify(receipts));
+        }
+      } catch (e) {}
+    }
+
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'properties', JSON.stringify(properties));
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'tenants', JSON.stringify(cleanedTenants));
+    localStorage.setItem(MIGRATION_KEY, 'done');
+    console.log('[RentEasy Migration] v6 unit prefix and isolation migration complete.');
+  } catch (err) {
+    console.warn('[RentEasy Migration] Notice during autoMigratePortfolioUnitFormat:', err);
+  }
+}
+autoMigratePortfolioUnitFormat();
+
+function isStockDemoPayload(payload: any): boolean {
+  if (!payload) return false;
+  const props = payload.properties;
+  const ll = payload.landlord;
+  if (ll?.name === 'Rajesh Sharma' || ll?.email === 'rajesh.sharma@renteasy.app') return true;
+  if (Array.isArray(props) && props.length > 0) {
+    const names = props.map((p: any) => p?.name || '');
+    if (
+      names.includes('Sunrise Residency') ||
+      names.includes('Greenwood Heights') ||
+      names.includes('Palm Meadows Annex') ||
+      names.includes('Koramangala Regal Court')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasLocalUserCustomData(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
+    if (!rawProps) return false;
+    const props = JSON.parse(rawProps);
+    if (!Array.isArray(props) || props.length === 0) return false;
+    const rawLandlord = localStorage.getItem(STORAGE_KEY_PREFIX + 'landlord');
+    const ll = rawLandlord ? JSON.parse(rawLandlord) : null;
+    return !isStockDemoPayload({ properties: props, landlord: ll });
+  } catch {
+    return false;
+  }
+}
+
 function getSyncEndpoint(path = ''): string {
+  if (typeof localStorage !== 'undefined') {
+    const custom = localStorage.getItem('renteasy_custom_sync_url');
+    if (custom && custom.trim()) {
+      return `${custom.trim().replace(/\/+$/, '')}/api/sync${path}`;
+    }
+  }
   if (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.startsWith('file:')) {
     return `${window.location.origin}/api/sync${path}`;
   }
-  return `http://192.168.0.104:5174/api/sync${path}`;
+  return `http://localhost:5174/api/sync${path}`;
 }
 
 let _isApplyingRemoteSync = false;
@@ -394,6 +462,52 @@ try {
   const storedRev = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_sync_revision') : null;
   if (storedRev) _currentLocalRevision = parseInt(storedRev, 10) || 0;
 } catch (e) {}
+
+function deduplicateCharges(charges: RentCharge[]): RentCharge[] {
+  if (!Array.isArray(charges) || charges.length <= 1) return charges || [];
+  const map = new Map<string, RentCharge>();
+
+  for (const c of charges) {
+    if (!c) continue;
+    const normMonth = (c.period_month || '').trim();
+    const normUnit = (c.unit_number || '').trim().toLowerCase();
+    const normTenant = (c.tenant_name || '').trim().toLowerCase();
+    const normProp = (c.property_name || '').trim().toLowerCase();
+
+    // Composite key per unit/tenant for the given billing period month
+    const key = normUnit ? `${normProp}::${normUnit}::${normMonth}` : `${normTenant}::${normMonth}`;
+
+    if (!map.has(key)) {
+      map.set(key, { ...c });
+    } else {
+      const existing = map.get(key)!;
+      // Merge best attributes: keep recorded payments, keep any arrears (other_charges)
+      const totalPaid = Math.max(Number(existing.amount_paid) || 0, Number(c.amount_paid) || 0);
+      const bestOther = Math.max(Number(existing.other_charges) || 0, Number(c.other_charges) || 0);
+      const rentAmt = Number(existing.rent_amount) || Number(c.rent_amount) || 0;
+      const totalDue = rentAmt + bestOther;
+      const outBal = Math.max(0, totalDue - totalPaid);
+
+      existing.amount_paid = totalPaid;
+      existing.other_charges = bestOther;
+      existing.total_due = totalDue;
+      existing.outstanding_balance = outBal;
+      if (c.lease_id && (!existing.lease_id || existing.lease_id.startsWith('lease-chg-'))) {
+        existing.lease_id = c.lease_id;
+      }
+      if (outBal === 0) {
+        existing.status = 'paid';
+      } else if (totalPaid > 0) {
+        existing.status = 'partially_paid';
+      } else {
+        const todayStr = new Date().toISOString().split('T')[0];
+        existing.status = (existing.due_date && existing.due_date < todayStr) ? 'overdue' : 'pending';
+      }
+    }
+  }
+
+  return Array.from(map.values());
+}
 
 function loadOrInit<T>(key: string, defaultVal: T): T {
   try {
@@ -430,6 +544,10 @@ function save<T>(key: string, val: T): void {
 
     if (typeof window !== 'undefined' && (window as any).__rentEasyService) {
       (window as any).__rentEasyService.schedulePushToServer();
+      // Continuous Auto-Backup to Google Drive on data mutations
+      if (['properties', 'tenants', 'rent_charges', 'payments', 'receipts', 'landlord'].includes(key)) {
+        (window as any).__rentEasyService.scheduleAutoGoogleDriveBackup();
+      }
     }
   }
 }
@@ -448,20 +566,95 @@ class RentEasyApiService {
   private _syncSubscribers: ((status: DeviceSyncStatus) => void)[] = [];
   private _pushTimer: any = null;
   private _pollTimer: any = null;
+  private _autoDriveBackupTimer: any = null;
+
+  scheduleAutoGoogleDriveBackup(delayMs = 1500): void {
+    if (this._autoDriveBackupTimer) clearTimeout(this._autoDriveBackupTimer);
+    this._autoDriveBackupTimer = setTimeout(() => {
+      this.triggerAutoGoogleDriveBackup();
+    }, delayMs);
+  }
+
+  triggerAutoGoogleDriveBackup(): void {
+    try {
+      const session = this.getGoogleDriveSession();
+      if (session && session.autoBackup) {
+        this.saveCloudBackupToGoogleDrive(false);
+        console.log(`[RentEasy Drive] Automatic backup captured for Google Drive (${session.email || 'Cloud'})`);
+      }
+    } catch (e) {
+      console.warn('[RentEasy Drive] Auto-backup notice:', e);
+    }
+  }
 
   constructor() {
     if (typeof window !== 'undefined') {
       (window as any).__rentEasyService = this;
     }
-    // Automatically run daily rent auto-update check on load
-    this.autoCheckAndApplyMonthlyRent();
+    // Auto-migrate units and tenant isolation in local storage
+    autoMigratePortfolioUnitFormat();
+    // Auto-purge any remaining stock demo records
+    this.checkAndPurgeStockDemoRecords();
     // Start continuous 2-way real-time synchronization between Phone and Web
     this.startLiveSyncEngine();
+    // Run daily rent auto-update check on load after sync has initialized
+    setTimeout(() => {
+      this.autoCheckAndApplyMonthlyRent();
+    }, 600);
+  }
+
+  checkAndPurgeStockDemoRecords(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
+      const rawLl = localStorage.getItem(STORAGE_KEY_PREFIX + 'landlord');
+      const props = rawProps ? JSON.parse(rawProps) : [];
+      const ll = rawLl ? JSON.parse(rawLl) : null;
+      if (isStockDemoPayload({ properties: props, landlord: ll })) {
+        console.log('[RentEasy] Erasing stock demo records on user request...');
+        this.eraseAllDemoRecords();
+      }
+    } catch (e) {
+      console.warn('Notice checking demo records:', e);
+    }
+  }
+
+  eraseAllDemoRecords(): void {
+    this.createSafetySnapshot('pre_erase_demo_records');
+    save('properties', []);
+    save('tenants', []);
+    save('rent_charges', []);
+    save('payments', []);
+    save('receipts', []);
+    save('message_jobs', []);
+    save('audit_logs', []);
+    const currentLl = this.getLandlord();
+    if (!currentLl || currentLl.name === 'Rajesh Sharma' || currentLl.email === 'rajesh.sharma@renteasy.app') {
+      save('landlord', {
+        id: 'll-001',
+        name: 'My Properties',
+        email: 'landlord@renteasy.app',
+        phone: '',
+        company_name: 'RentEasy Portfolio',
+        upi_id: '',
+        timezone: 'Asia/Kolkata'
+      });
+    }
+    _currentLocalRevision = Date.now();
+    try {
+      localStorage.setItem('renteasy_sync_revision', String(_currentLocalRevision));
+    } catch (e) {}
+    this.pushCurrentDatabaseToServer();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'clean_slate' } }));
+    }
   }
 
   // 1. AUTOMATIC MONTHLY RENT UPDATER ON GIVEN DUE DATE
   autoCheckAndApplyMonthlyRent(referenceDate = new Date()): { updatedCount: number; messagesSent: number } {
-    const charges = loadOrInit('rent_charges', initialRentCharges);
+    let rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    let charges = deduplicateCharges(rawCharges);
+    let chargesModified = charges.length !== rawCharges.length;
     const tenants = loadOrInit('tenants', initialTenants);
     const year = referenceDate.getFullYear();
     const month = referenceDate.getMonth() + 1;
@@ -477,14 +670,35 @@ class RentEasyApiService {
       // Check if today is on or past the tenant's configured due date
       const dueDay = t.due_day || 5;
       if (todayDay >= dueDay) {
-        // Check if charge already exists for this tenant and this month
-        const alreadyBilled = charges.some(c => c.lease_id === t.active_lease_id && c.period_month === currentPeriod);
-        if (!alreadyBilled) {
+        // Robust check: check by lease_id, tenant_name, or unit_number + property_name to NEVER cross-pollinate properties
+        const existingCharge = charges.find(
+          c =>
+            c.period_month === currentPeriod &&
+            (c.lease_id === t.active_lease_id ||
+              (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase()) ||
+              (c.property_name && t.linked_property_name && c.property_name.trim().toLowerCase() === t.linked_property_name.trim().toLowerCase() &&
+                c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase()))
+        );
+
+        if (existingCharge) {
+          // Heal the lease_id connection if it had a previous ID
+          if (existingCharge.lease_id !== t.active_lease_id) {
+            existingCharge.lease_id = t.active_lease_id;
+            chargesModified = true;
+          }
+        } else {
           // Carry forward balance from previous month
           const prevMonth = month > 1 ? month - 1 : 12;
           const prevYear = month > 1 ? year : year - 1;
           const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
-          const prevCharge = charges.find(c => c.lease_id === t.active_lease_id && c.period_month === prevPeriod);
+          const prevCharge = charges.find(
+            c =>
+              c.period_month === prevPeriod &&
+              (c.lease_id === t.active_lease_id ||
+                (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase()) ||
+                (c.property_name && t.linked_property_name && c.property_name.trim().toLowerCase() === t.linked_property_name.trim().toLowerCase() &&
+                  c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase()))
+          );
           const carryForward = prevCharge ? prevCharge.outstanding_balance : 0;
 
           const total = t.monthly_rent + carryForward;
@@ -510,6 +724,7 @@ class RentEasyApiService {
 
           charges.push(newCharge);
           updatedCount++;
+          chargesModified = true;
 
           // Send auto-update reminder / notice message to tenant
           if (t.whatsapp_enabled) {
@@ -541,23 +756,33 @@ class RentEasyApiService {
       }
     }
 
-    if (updatedCount > 0) {
-      save('rent_charges', charges);
+    if (chargesModified) {
+      save('rent_charges', deduplicateCharges(charges));
       this.recalculateTenantBalances();
-      this.addAudit('auto_rent_updated', 'rent_charge', currentPeriod, `Auto-updated rent for ${updatedCount} houses on their given due dates. Dispatched ${messagesSent} notices.`);
+      if (updatedCount > 0) {
+        this.addAudit('auto_rent_updated', 'rent_charge', currentPeriod, `Auto-updated rent for ${updatedCount} houses on their given due dates. Dispatched ${messagesSent} notices.`);
+      }
     }
 
     return { updatedCount, messagesSent };
   }
 
   generateMonthlyCharges(periodMonth: string): { createdCount: number } {
-    const charges = loadOrInit('rent_charges', initialRentCharges);
+    let rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    let charges = deduplicateCharges(rawCharges);
     const tenants = loadOrInit('tenants', initialTenants);
     let createdCount = 0;
 
     for (const t of tenants) {
       if (t.status !== 'active' || !t.active_lease_id || !t.monthly_rent) continue;
-      const exists = charges.some(c => c.lease_id === t.active_lease_id && c.period_month === periodMonth);
+      const exists = charges.some(
+        c =>
+          c.period_month === periodMonth &&
+          (c.lease_id === t.active_lease_id ||
+            (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase()) ||
+            (c.property_name && t.linked_property_name && c.property_name.trim().toLowerCase() === t.linked_property_name.trim().toLowerCase() &&
+              c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase()))
+      );
       if (!exists) {
         const [yearStr, monthStr] = periodMonth.split('-');
         const dueDayStr = String(t.due_day || 5).padStart(2, '0');
@@ -583,25 +808,52 @@ class RentEasyApiService {
       }
     }
 
-    if (createdCount > 0) {
-      save('rent_charges', charges);
+    if (createdCount > 0 || charges.length !== rawCharges.length) {
+      save('rent_charges', deduplicateCharges(charges));
       this.recalculateTenantBalances();
-      this.addAudit('charges_generated', 'rent_charge', periodMonth, `Generated ${createdCount} rent charges for ${periodMonth}.`);
+      if (createdCount > 0) {
+        this.addAudit('charges_generated', 'rent_charge', periodMonth, `Generated ${createdCount} rent charges for ${periodMonth}.`);
+      }
     }
 
     return { createdCount };
   }
 
-  // Recalculates live house balance for each tenant
+  // Recalculates live house balance for each tenant (eliminates duplicate counting)
   recalculateTenantBalances(): void {
     const tenants = loadOrInit('tenants', initialTenants);
-    const charges = loadOrInit('rent_charges', initialRentCharges);
+    const rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    const charges = deduplicateCharges(rawCharges);
+    if (charges.length !== rawCharges.length) {
+      saveLocalOnly('rent_charges', charges);
+    }
     let changed = false;
 
     for (const t of tenants) {
-      const tenantCharges = charges.filter(c => c.lease_id === t.active_lease_id);
-      const totalOutstanding = tenantCharges.reduce((acc, c) => acc + c.outstanding_balance, 0);
-      const newBal = (t.initial_balance || 0) + totalOutstanding;
+      // Find all charges belonging to this tenant across any month
+      const tenantCharges = charges.filter(
+        c =>
+          c.lease_id === t.active_lease_id ||
+          (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase() &&
+            (!c.property_name || !t.linked_property_name || c.property_name.trim().toLowerCase() === t.linked_property_name.trim().toLowerCase())) ||
+          (c.property_name && t.linked_property_name && c.property_name.trim().toLowerCase() === t.linked_property_name.trim().toLowerCase() &&
+           c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase())
+      );
+
+      // Track distinct months to prevent any double counting
+      const seenMonths = new Set<string>();
+      let totalOutstanding = 0;
+      for (const c of tenantCharges) {
+        if (!seenMonths.has(c.period_month)) {
+          seenMonths.add(c.period_month);
+          totalOutstanding += Number(c.outstanding_balance || 0);
+        }
+      }
+
+      // If tenant has charges, totalOutstanding represents their exact balance
+      // (the firstCharge already includes initial_balance in other_charges).
+      // If no charges exist yet, fall back to initial_balance + monthly_rent.
+      const newBal = tenantCharges.length > 0 ? totalOutstanding : ((Number(t.initial_balance) || 0) + (Number(t.monthly_rent) || 0));
       if (t.balance_amount !== newBal) {
         t.balance_amount = newBal;
         changed = true;
@@ -633,16 +885,22 @@ class RentEasyApiService {
     for (const p of properties) {
       if (p.units && p.units.length > 0) {
         for (const u of p.units) {
-          // Find matching active tenant for this unit
-          const t = tenants.find(item =>
-            (item.active_lease_id && u.current_lease_id && item.active_lease_id === u.current_lease_id) ||
-            (u.current_tenant_name && item.name.trim().toLowerCase() === u.current_tenant_name.trim().toLowerCase()) ||
-            (item.house_number && u.unit_number && item.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase() &&
-             (!item.linked_property_name || item.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase())) ||
-            (item.property_id && item.property_id === p.id && item.house_number && u.unit_number && item.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase())
-          );
+          // Find matching active tenant for this unit (STRICTLY scoped to this property p)
+          const t = tenants.find(item => {
+            if (item.status !== 'active') return false;
+            const belongsToThisProp =
+              (item.property_id && item.property_id === p.id) ||
+              (item.linked_property_name && item.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase());
+            if (!belongsToThisProp) return false;
 
-          if (t && t.status === 'active') {
+            return (
+              (item.active_lease_id && u.current_lease_id && item.active_lease_id === u.current_lease_id) ||
+              (item.house_number && u.unit_number && item.house_number.trim().toLowerCase() === u.unit_number.trim().toLowerCase()) ||
+              (u.current_tenant_name && item.name.trim().toLowerCase() === u.current_tenant_name.trim().toLowerCase())
+            );
+          });
+
+          if (t) {
             if (u.status !== 'occupied') {
               u.status = 'occupied';
               updated = true;
@@ -660,6 +918,12 @@ class RentEasyApiService {
               u.default_rent = t.monthly_rent;
               updated = true;
             }
+          } else if (u.status === 'occupied' || u.current_tenant_name) {
+            // No active tenant from property p matches this unit -> must be vacant!
+            u.status = 'vacant';
+            u.current_tenant_name = undefined;
+            u.current_lease_id = undefined;
+            updated = true;
           }
 
           // If unit default_rent is 0 or missing, heal it from property default_rent
@@ -698,6 +962,266 @@ class RentEasyApiService {
     this.addAudit('unit_rent_updated', 'property_unit', unit.id, `Updated base rent for ${prop.name} (${unit.unit_number}) to ₹${newRent}`);
   }
 
+  updateUnitNumber(propertyId: string, unitId: string, newUnitNumber: string): { success: boolean; oldUnitNumber: string; newUnitNumber: string } {
+    const rawNumber = newUnitNumber.trim();
+    if (!rawNumber) throw new Error('House / Unit number cannot be empty.');
+
+    const properties = this.getProperties();
+    const prop = properties.find(p => p.id === propertyId);
+    if (!prop || !prop.units) throw new Error('Property or units not found.');
+
+    const unit = prop.units.find(u => u.id === unitId || u.unit_number === unitId);
+    if (!unit) throw new Error('Unit not found.');
+
+    // Auto-prefix with property initial if entered as bare digits
+    const initial = (prop.name || '').trim().charAt(0).toUpperCase();
+    const digitsOnly = rawNumber.replace(/^(?:house\s*#?\s*|flat\s*#?\s*|unit\s*#?\s*|[a-z]-?)/i, '').trim();
+    let cleanNumber = rawNumber;
+    if (/^\d+$/.test(digitsOnly) && !rawNumber.toUpperCase().startsWith(`${initial}-`)) {
+      cleanNumber = `${initial}-${digitsOnly}`;
+    }
+
+    const oldUnitNumber = unit.unit_number;
+    if (oldUnitNumber === cleanNumber) {
+      return { success: true, oldUnitNumber, newUnitNumber: cleanNumber };
+    }
+
+    // Check if another unit in this property already has this number
+    const duplicate = prop.units.find(u => u.id !== unit.id && u.unit_number.trim().toLowerCase() === cleanNumber.toLowerCase());
+    if (duplicate) {
+      throw new Error(`Another unit in "${prop.name}" already uses the number "${cleanNumber}".`);
+    }
+
+    // 1. Update unit in property inventory
+    unit.unit_number = cleanNumber;
+    save('properties', properties);
+
+    // 2. Synchronize any tenant assigned to this unit
+    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    let tenantUpdated = false;
+    tenants.forEach(t => {
+      const belongsToThisProp =
+        (t.property_id && t.property_id === prop.id) ||
+        (t.linked_property_name && t.linked_property_name.trim().toLowerCase() === prop.name.trim().toLowerCase());
+      if (!belongsToThisProp) return;
+
+      const isAssigned =
+        (unit.current_lease_id && t.active_lease_id === unit.current_lease_id) ||
+        (unit.current_tenant_name && t.name.trim().toLowerCase() === unit.current_tenant_name.trim().toLowerCase()) ||
+        (t.house_number.trim().toLowerCase() === oldUnitNumber.toLowerCase());
+
+      if (isAssigned) {
+        t.house_number = cleanNumber;
+        t.linked_unit_number = cleanNumber;
+        tenantUpdated = true;
+      }
+    });
+
+    if (tenantUpdated) {
+      save('tenants', tenants);
+    }
+
+    // 3. Update rent charges
+    const charges = loadOrInit<RentCharge[]>('rent_charges', initialRentCharges);
+    let chargesUpdated = false;
+    charges.forEach(c => {
+      const matches =
+        (c.property_name && c.property_name.trim().toLowerCase() === prop.name.trim().toLowerCase() &&
+          c.unit_number && c.unit_number.trim().toLowerCase() === oldUnitNumber.toLowerCase()) ||
+        (unit.current_lease_id && c.lease_id === unit.current_lease_id);
+
+      if (matches) {
+        c.unit_number = cleanNumber;
+        chargesUpdated = true;
+      }
+    });
+
+    if (chargesUpdated) {
+      save('rent_charges', charges);
+    }
+
+    // 4. Update receipts
+    const receipts = loadOrInit<Receipt[]>('receipts', initialReceipts);
+    let receiptsUpdated = false;
+    receipts.forEach(r => {
+      if (
+        r.unit_number &&
+        r.unit_number.trim().toLowerCase() === oldUnitNumber.toLowerCase() &&
+        (!r.property_name || r.property_name.trim().toLowerCase() === prop.name.trim().toLowerCase())
+      ) {
+        r.unit_number = cleanNumber;
+        receiptsUpdated = true;
+      }
+    });
+    if (receiptsUpdated) {
+      save('receipts', receipts);
+    }
+
+    this.recalculateTenantBalances();
+    this.addAudit(
+      'unit_renamed',
+      'property_unit',
+      unit.id,
+      `Renamed unit in "${prop.name}" from "${oldUnitNumber}" to "${cleanNumber}".`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'unit_rename', oldUnitNumber, newUnitNumber: cleanNumber } }));
+    }
+
+    return { success: true, oldUnitNumber, newUnitNumber: cleanNumber };
+  }
+
+  updateTenantHouseNumber(tenantId: string, newHouseNumber: string): { success: boolean; oldHouseNumber: string; newHouseNumber: string } {
+    const rawNumber = newHouseNumber.trim();
+    if (!rawNumber) throw new Error('House number cannot be empty.');
+
+    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (!tenant) throw new Error('Tenant not found.');
+
+    const pName = (tenant.linked_property_name || '').trim();
+    const initial = pName ? pName.charAt(0).toUpperCase() : 'A';
+    const digitsOnly = rawNumber.replace(/^(?:house\s*#?\s*|flat\s*#?\s*|unit\s*#?\s*|[a-z]-?)/i, '').trim();
+    let cleanNumber = rawNumber;
+    if (/^\d+$/.test(digitsOnly) && !rawNumber.toUpperCase().startsWith(`${initial}-`)) {
+      cleanNumber = `${initial}-${digitsOnly}`;
+    }
+
+    const oldHouseNumber = tenant.house_number;
+    if (oldHouseNumber === cleanNumber) {
+      return { success: true, oldHouseNumber, newHouseNumber: cleanNumber };
+    }
+
+    // Check if this tenant is linked to a property unit
+    const properties = this.getProperties();
+    let unitUpdatedViaProperty = false;
+
+    // Only search tenant's own property
+    const targetProps = properties.filter(p =>
+      (tenant.property_id && p.id === tenant.property_id) ||
+      (tenant.linked_property_name && p.name.trim().toLowerCase() === tenant.linked_property_name.trim().toLowerCase())
+    );
+
+    for (const prop of targetProps) {
+      if (prop.units && prop.units.length > 0) {
+        const matchingUnit = prop.units.find(u =>
+          (tenant.active_lease_id && u.current_lease_id === tenant.active_lease_id) ||
+          (u.current_tenant_name && u.current_tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase()) ||
+          (u.unit_number.trim().toLowerCase() === oldHouseNumber.toLowerCase())
+        );
+
+        if (matchingUnit) {
+          this.updateUnitNumber(prop.id, matchingUnit.id, cleanNumber);
+          unitUpdatedViaProperty = true;
+          break;
+        }
+      }
+    }
+
+    if (!unitUpdatedViaProperty) {
+      tenant.house_number = cleanNumber;
+      tenant.linked_unit_number = cleanNumber;
+      save('tenants', tenants);
+
+      const charges = loadOrInit<RentCharge[]>('rent_charges', initialRentCharges);
+      let chargesUpdated = false;
+      charges.forEach(c => {
+        const matches =
+          (tenant.active_lease_id && c.lease_id === tenant.active_lease_id) ||
+          (c.tenant_name && c.tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase()) ||
+          (c.property_name && tenant.linked_property_name && c.property_name.trim().toLowerCase() === tenant.linked_property_name.trim().toLowerCase() &&
+           c.unit_number && c.unit_number.trim().toLowerCase() === oldHouseNumber.toLowerCase());
+
+        if (matches) {
+          c.unit_number = cleanNumber;
+          chargesUpdated = true;
+        }
+      });
+      if (chargesUpdated) {
+        save('rent_charges', charges);
+      }
+
+      const receipts = loadOrInit<Receipt[]>('receipts', initialReceipts);
+      let receiptsUpdated = false;
+      receipts.forEach(r => {
+        if (
+          r.unit_number &&
+          r.unit_number.trim().toLowerCase() === oldHouseNumber.toLowerCase() &&
+          (!r.tenant_name || r.tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase())
+        ) {
+          r.unit_number = cleanNumber;
+          receiptsUpdated = true;
+        }
+      });
+      if (receiptsUpdated) {
+        save('receipts', receipts);
+      }
+
+      this.recalculateTenantBalances();
+      this.addAudit('tenant_house_renamed', 'tenant', tenant.id, `Renamed house number for tenant "${tenant.name}" from "${oldHouseNumber}" to "${cleanNumber}".`);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'tenant_house_rename', oldHouseNumber, newHouseNumber: cleanNumber } }));
+      }
+    }
+
+    return { success: true, oldHouseNumber, newHouseNumber: cleanNumber };
+  }
+
+  moveTenantOrder(tenantId: string, direction: 'up' | 'down'): boolean {
+    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const index = tenants.findIndex(t => t.id === tenantId);
+    if (index === -1) return false;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= tenants.length) return false;
+
+    const [movedTenant] = tenants.splice(index, 1);
+    tenants.splice(targetIndex, 0, movedTenant);
+
+    save('tenants', tenants);
+
+    this.addAudit(
+      'tenant_reordered',
+      'tenant',
+      tenantId,
+      `Moved tenant "${movedTenant.name}" (${movedTenant.house_number}) ${direction}.`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'tenant_reorder', tenantId, direction } }));
+    }
+
+    return true;
+  }
+
+  sortTenantsByHouseNumber(ascending = true): boolean {
+    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    tenants.sort((a, b) => {
+      // Group by property name first so Property A and Property C tenants stay distinct
+      const propA = (a.linked_property_name || '').trim().toLowerCase();
+      const propB = (b.linked_property_name || '').trim().toLowerCase();
+      if (propA !== propB) {
+        return propA.localeCompare(propB);
+      }
+      const numA = parseInt((a.house_number || '').replace(/\D/g, '') || '0', 10);
+      const numB = parseInt((b.house_number || '').replace(/\D/g, '') || '0', 10);
+      if (numA !== numB) {
+        return ascending ? numA - numB : numB - numA;
+      }
+      return (a.house_number || '').localeCompare(b.house_number || '');
+    });
+
+    save('tenants', tenants);
+    this.addAudit('tenants_sorted', 'tenant', 'all', `Sorted all tenants by house number ${ascending ? '1 to N' : 'N to 1'}.`);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'tenants_sorted' } }));
+    }
+    return true;
+  }
+
   addProperty(data: {
     name: string;
     address: string;
@@ -715,8 +1239,11 @@ class RentEasyApiService {
     const properties = this.getProperties();
     const propId = `prop-${Date.now()}`;
     const count = Math.max(1, data.total_units || 1);
-    const prefix = data.unit_prefix !== undefined ? data.unit_prefix : 'Flat ';
-    const startNum = data.start_number || 101;
+    const initial = data.name.trim().length <= 3
+      ? data.name.trim().toUpperCase()
+      : data.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase();
+    const prefix = data.unit_prefix !== undefined ? data.unit_prefix : `${initial}-`;
+    const startNum = data.start_number || (prefix.endsWith('-') ? 1 : 101);
 
     const generatedUnits: PropertyUnit[] = [];
     if (data.custom_unit_names && data.custom_unit_names.length > 0) {
@@ -775,10 +1302,19 @@ class RentEasyApiService {
     const prop = properties.find(p => p.id === propertyId);
     if (!prop) throw new Error('Property not found');
 
+    let cleanUnitNumber = unitNumber.trim();
+    const initial = prop.name.trim().length <= 3
+      ? prop.name.trim().toUpperCase()
+      : prop.name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase();
+
+    if (/^\d+$/.test(cleanUnitNumber)) {
+      cleanUnitNumber = `${initial}-${cleanUnitNumber}`;
+    }
+
     const newUnit: PropertyUnit = {
       id: `u-${propertyId}-${Date.now()}`,
       property_id: propertyId,
-      unit_number: unitNumber,
+      unit_number: cleanUnitNumber,
       property_type: propertyType || prop.property_type,
       default_rent: defaultRent || prop.default_rent,
       status: 'vacant'
@@ -804,8 +1340,12 @@ class RentEasyApiService {
     const tenants = loadOrInit('tenants', initialTenants);
     let tenantsUpdated = false;
     tenants.forEach(t => {
-      if (t.linked_property_name === prop.name || (prop.units && prop.units.some(u => u.unit_number === t.house_number))) {
+      const belongsToThisProp =
+        t.property_id === prop.id ||
+        (t.linked_property_name && t.linked_property_name.trim().toLowerCase() === prop.name.trim().toLowerCase());
+      if (belongsToThisProp) {
         t.linked_property_name = undefined;
+        t.property_id = undefined;
         tenantsUpdated = true;
       }
     });
@@ -869,21 +1409,30 @@ class RentEasyApiService {
     const properties = this.getProperties();
     let propUpdated = false;
     properties.forEach(p => {
-      if (p.current_tenant_name === tenant.name) {
-        p.status = 'vacant';
-        p.current_tenant_name = undefined;
-        p.current_lease_id = undefined;
-        propUpdated = true;
-      }
+      const isTargetProp =
+        (tenant.property_id && tenant.property_id === p.id) ||
+        (tenant.linked_property_name && tenant.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase());
+      if (!isTargetProp) return;
+
       if (p.units) {
         p.units.forEach(u => {
-          if (u.current_tenant_name === tenant.name || u.unit_number === tenant.house_number) {
+          const isThisUnit =
+            (tenant.active_lease_id && u.current_lease_id === tenant.active_lease_id) ||
+            (u.current_tenant_name && u.current_tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase()) ||
+            (u.unit_number.trim().toLowerCase() === tenant.house_number.trim().toLowerCase());
+          if (isThisUnit) {
             u.status = 'vacant';
             u.current_tenant_name = undefined;
             u.current_lease_id = undefined;
             propUpdated = true;
           }
         });
+      }
+      if (p.current_tenant_name === tenant.name || (tenant.active_lease_id && p.current_lease_id === tenant.active_lease_id)) {
+        p.status = 'vacant';
+        p.current_tenant_name = undefined;
+        p.current_lease_id = undefined;
+        propUpdated = true;
       }
     });
     if (propUpdated) {
@@ -987,6 +1536,7 @@ class RentEasyApiService {
       email: data.email,
       emergency_contact: data.emergency_contact,
       status: 'active',
+      property_id: data.property_id || undefined,
       linked_property_name: linkedPropName,
       linked_unit_number: linkedUnit,
       house_number: data.house_number || linkedUnit,
@@ -1063,6 +1613,7 @@ class RentEasyApiService {
       whatsapp_enabled?: boolean;
       sms_enabled?: boolean;
       status?: 'active' | 'past' | 'notice';
+      initial_balance?: number;
     }
   ): Tenant {
     const tenants = loadOrInit('tenants', initialTenants);
@@ -1074,6 +1625,7 @@ class RentEasyApiService {
     const oldName = tenant.name;
     const oldHouse = tenant.house_number;
     const oldDueDay = tenant.due_day;
+    const oldInitialBal = Number(tenant.initial_balance || 0);
 
     // 1. Update basic contact & personal details
     if (data.name !== undefined && data.name.trim()) tenant.name = data.name.trim();
@@ -1096,7 +1648,14 @@ class RentEasyApiService {
     if (data.whatsapp_enabled !== undefined) tenant.whatsapp_enabled = !!data.whatsapp_enabled;
     if (data.sms_enabled !== undefined) tenant.sms_enabled = !!data.sms_enabled;
 
-    // 2. Property & Unit re-linking if property_id or house_number changed
+    // 2. Previous Balance (initial_balance) update
+    const initialBalProvided = data.initial_balance !== undefined;
+    const newInitialBal = initialBalProvided ? Math.max(0, Number(data.initial_balance)) : oldInitialBal;
+    const initialBalChanged = initialBalProvided && newInitialBal !== oldInitialBal;
+    const initialBalDiff = newInitialBal - oldInitialBal;
+    tenant.initial_balance = newInitialBal;
+
+    // 3. Property & Unit re-linking if property_id or house_number changed
     const properties = this.getProperties();
     let propUpdated = false;
 
@@ -1113,22 +1672,40 @@ class RentEasyApiService {
       tenant.linked_unit_number = data.house_number.trim();
     }
 
-    // 3. Rent update & synchronization
+    // 4. Rent update & synchronization
     const rentChanged = data.monthly_rent !== undefined && Number(data.monthly_rent) !== oldRent;
     const newRent = data.monthly_rent !== undefined ? Number(data.monthly_rent) : oldRent;
     tenant.monthly_rent = newRent;
 
-    // Synchronize linked unit & property default_rent and tenant name
+    // Synchronize linked unit & property default_rent and tenant name ONLY in tenant's target property
     properties.forEach(p => {
+      const isTargetProp =
+        (tenant.property_id && tenant.property_id === p.id) ||
+        (tenant.linked_property_name && tenant.linked_property_name.trim().toLowerCase() === p.name.trim().toLowerCase());
+
+      if (!isTargetProp) {
+        // If this is NOT the target property, ensure this tenant is not mistakenly present in any units here
+        if (p.units) {
+          p.units.forEach(u => {
+            if (u.current_tenant_name === tenant.name || u.current_tenant_name === oldName || (tenant.active_lease_id && u.current_lease_id === tenant.active_lease_id)) {
+              u.status = 'vacant';
+              u.current_tenant_name = undefined;
+              u.current_lease_id = undefined;
+              propUpdated = true;
+            }
+          });
+        }
+        return; // NEVER update non-target property
+      }
+
       let matchedInProp = false;
       if (p.units && p.units.length > 0) {
         p.units.forEach(u => {
           const isThisUnit =
             (tenant.active_lease_id && u.current_lease_id === tenant.active_lease_id) ||
-            u.current_tenant_name === oldName ||
-            u.current_tenant_name === tenant.name ||
-            (p.name === tenant.linked_property_name && u.unit_number.toLowerCase() === (oldHouse || tenant.house_number).toLowerCase()) ||
-            (tenant.property_id === p.id && u.unit_number.toLowerCase() === (oldHouse || tenant.house_number).toLowerCase());
+            u.unit_number.toLowerCase() === tenant.house_number.toLowerCase() ||
+            (oldHouse && u.unit_number.toLowerCase() === oldHouse.toLowerCase()) ||
+            (u.current_tenant_name && (u.current_tenant_name === oldName || u.current_tenant_name === tenant.name));
 
           if (isThisUnit) {
             u.current_tenant_name = tenant.name;
@@ -1160,18 +1737,61 @@ class RentEasyApiService {
       save('properties', properties);
     }
 
-    // 4. Update active/pending rent charges for this tenant so new rent is immediately reflected
+    // 5. Update active/pending rent charges for this tenant so new rent and previous balance are immediately reflected
     const charges = loadOrInit('rent_charges', initialRentCharges);
     let chargesUpdated = false;
     const todayStr = new Date().toISOString().split('T')[0];
 
-    charges.forEach(c => {
-      const isTenantCharge =
-        (tenant.active_lease_id && c.lease_id === tenant.active_lease_id) ||
-        c.tenant_name === oldName ||
-        c.tenant_name === tenant.name;
+    const isTenantCharge = (c: RentCharge) =>
+      (tenant.active_lease_id && c.lease_id === tenant.active_lease_id) ||
+      (c.property_name && tenant.linked_property_name && c.property_name.trim().toLowerCase() === tenant.linked_property_name.trim().toLowerCase() &&
+        ((c.tenant_name && oldName && c.tenant_name.trim().toLowerCase() === oldName.trim().toLowerCase()) ||
+         (c.tenant_name && tenant.name && c.tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase())));
 
-      if (isTenantCharge) {
+    // If initial_balance changed, update the charge holding previous balance
+    if (initialBalChanged && initialBalDiff !== 0) {
+      const tenantChargesList = charges.filter(c => isTenantCharge(c));
+
+      // Candidate 1: Charge that currently has other_charges matching oldInitialBal (if oldInitialBal > 0)
+      let chargeToAdjust = tenantChargesList.find(c => Number(c.other_charges || 0) === oldInitialBal && oldInitialBal > 0);
+
+      // Candidate 2: Any charge that currently has other_charges > 0
+      if (!chargeToAdjust) {
+        chargeToAdjust = tenantChargesList.find(c => Number(c.other_charges || 0) > 0);
+      }
+
+      // Candidate 3: Earliest pending or unpaid charge
+      if (!chargeToAdjust) {
+        chargeToAdjust = tenantChargesList.find(c => c.status !== 'paid');
+      }
+
+      // Candidate 4: Earliest charge by period_month
+      if (!chargeToAdjust && tenantChargesList.length > 0) {
+        chargeToAdjust = [...tenantChargesList].sort((a, b) => (a.period_month || '').localeCompare(b.period_month || ''))[0];
+      }
+
+      if (chargeToAdjust) {
+        const curOther = Number(chargeToAdjust.other_charges || 0);
+        const updatedOther = Math.max(0, curOther + initialBalDiff);
+        chargeToAdjust.other_charges = updatedOther;
+        const curRent = rentChanged ? newRent : Number(chargeToAdjust.rent_amount || 0);
+        chargeToAdjust.total_due = curRent + updatedOther;
+        const paidSoFar = Number(chargeToAdjust.amount_paid || 0);
+        chargeToAdjust.outstanding_balance = Math.max(0, chargeToAdjust.total_due - paidSoFar);
+
+        if (chargeToAdjust.outstanding_balance === 0) {
+          chargeToAdjust.status = 'paid';
+        } else if (paidSoFar > 0) {
+          chargeToAdjust.status = 'partially_paid';
+        } else {
+          chargeToAdjust.status = (chargeToAdjust.due_date && chargeToAdjust.due_date < todayStr) ? 'overdue' : 'pending';
+        }
+        chargesUpdated = true;
+      }
+    }
+
+    charges.forEach(c => {
+      if (isTenantCharge(c)) {
         c.tenant_name = tenant.name;
         c.tenant_phone = tenant.phone;
         if (tenant.house_number) c.unit_number = tenant.house_number;
@@ -1190,8 +1810,8 @@ class RentEasyApiService {
 
         // If rent changed, update charge amounts immediately
         if (rentChanged) {
-          const otherCharges = c.other_charges || 0;
-          const paidSoFar = c.amount_paid || 0;
+          const otherCharges = Number(c.other_charges || 0);
+          const paidSoFar = Number(c.amount_paid || 0);
           c.rent_amount = newRent;
           c.total_due = newRent + otherCharges;
           c.outstanding_balance = Math.max(0, c.total_due - paidSoFar);
@@ -1201,7 +1821,7 @@ class RentEasyApiService {
           } else if (paidSoFar > 0) {
             c.status = 'partially_paid';
           } else {
-            c.status = c.due_date < todayStr ? 'overdue' : 'pending';
+            c.status = (c.due_date && c.due_date < todayStr) ? 'overdue' : 'pending';
           }
           chargesUpdated = true;
         }
@@ -1229,10 +1849,10 @@ class RentEasyApiService {
         tenant_phone: tenant.phone,
         period_month: currentMonth,
         rent_amount: tenant.monthly_rent,
-        other_charges: 0,
-        total_due: tenant.monthly_rent,
+        other_charges: tenant.initial_balance || 0,
+        total_due: tenant.monthly_rent + (tenant.initial_balance || 0),
         amount_paid: 0,
-        outstanding_balance: tenant.monthly_rent,
+        outstanding_balance: tenant.monthly_rent + (tenant.initial_balance || 0),
         due_date: dueDate,
         status: (dueDate < todayStr ? 'overdue' : 'pending') as RentChargeStatus,
         created_at: new Date().toISOString()
@@ -1260,7 +1880,7 @@ class RentEasyApiService {
       save('leases', leases);
     }
 
-    // 5. Save tenants first so recalculateTenantBalances picks up new data
+    // 6. Save tenants first so recalculateTenantBalances picks up new data
     save('tenants', tenants);
     this.recalculateTenantBalances();
 
@@ -1268,16 +1888,16 @@ class RentEasyApiService {
       window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'local', key: 'tenants' } }));
     }
 
-    // 6. Reload updated tenant to return latest balance
+    // 7. Reload updated tenant to return latest balance
     const refreshedTenants = loadOrInit('tenants', initialTenants);
     const updatedTenant = refreshedTenants.find(t => t.id === tenantId) || tenant;
 
-    // 7. Audit log
+    // 8. Audit log
     this.addAudit(
       'tenant_updated',
       'tenant',
       tenant.id,
-      `Updated tenant "${updatedTenant.name}" (House ${updatedTenant.house_number}). Monthly rent set to ₹${updatedTenant.monthly_rent.toLocaleString('en-IN')}${rentChanged ? ` (was ₹${oldRent.toLocaleString('en-IN')})` : ''}, Live balance: ₹${updatedTenant.balance_amount.toLocaleString('en-IN')}.`
+      `Updated tenant "${updatedTenant.name}" (House ${updatedTenant.house_number}). Monthly rent: ₹${updatedTenant.monthly_rent.toLocaleString('en-IN')}${rentChanged ? ` (was ₹${oldRent.toLocaleString('en-IN')})` : ''}, Previous Balance: ₹${updatedTenant.initial_balance.toLocaleString('en-IN')}${initialBalChanged ? ` (was ₹${oldInitialBal.toLocaleString('en-IN')})` : ''}, Live balance: ₹${updatedTenant.balance_amount.toLocaleString('en-IN')}.`
     );
 
     return updatedTenant;
@@ -1294,9 +1914,255 @@ class RentEasyApiService {
     return t!;
   }
 
+  // ---------------------------------------------------------------------------
+  // PROPERTY OWNERS MANAGEMENT
+  // ---------------------------------------------------------------------------
+  getOwners(): PropertyOwner[] {
+    const landlord = this.getLandlord();
+    const defaultOwnerName = landlord.name && landlord.name.trim() !== 'My Properties' ? landlord.name : 'Mohammed Hussain';
+    const fallbackDefault: PropertyOwner = {
+      id: 'owner-default-1',
+      name: defaultOwnerName,
+      phone: landlord.phone || '+91 98450 12345',
+      email: landlord.email,
+      address: landlord.company_name && landlord.company_name !== 'RentEasy Portfolio' ? landlord.company_name : 'Bengaluru, Karnataka, India',
+      aadhaar_or_pan: '',
+      is_default: true,
+      created_at: new Date().toISOString()
+    };
+    const owners = loadOrInit<PropertyOwner[]>('property_owners', [fallbackDefault]);
+    if (!owners || owners.length === 0) {
+      save('property_owners', [fallbackDefault]);
+      return [fallbackDefault];
+    }
+    return owners;
+  }
+
+  saveOwners(owners: PropertyOwner[]): void {
+    save('property_owners', owners);
+  }
+
+  addOwner(ownerData: Omit<PropertyOwner, 'id'>): PropertyOwner {
+    const owners = this.getOwners();
+    const newOwner: PropertyOwner = {
+      ...ownerData,
+      id: `owner-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      created_at: new Date().toISOString()
+    };
+    if (newOwner.is_default) {
+      owners.forEach(o => { o.is_default = false; });
+    }
+    owners.push(newOwner);
+    this.saveOwners(owners);
+    this.addAudit('owner_added', 'property_owner', newOwner.id, `Added property owner/lessor "${newOwner.name}".`);
+    return newOwner;
+  }
+
+  updateOwner(owner: PropertyOwner): void {
+    const owners = this.getOwners();
+    const idx = owners.findIndex(o => o.id === owner.id);
+    if (idx !== -1) {
+      if (owner.is_default) {
+        owners.forEach(o => { o.is_default = false; });
+      }
+      owners[idx] = { ...owner };
+      this.saveOwners(owners);
+      this.addAudit('owner_updated', 'property_owner', owner.id, `Updated property owner/lessor "${owner.name}".`);
+    }
+  }
+
+  deleteOwner(id: string): void {
+    let owners = this.getOwners();
+    if (owners.length <= 1) {
+      throw new Error('At least one property owner must remain registered.');
+    }
+    owners = owners.filter(o => o.id !== id);
+    if (!owners.some(o => o.is_default)) {
+      owners[0].is_default = true;
+    }
+    this.saveOwners(owners);
+  }
+
+  // ---------------------------------------------------------------------------
+  // RENTAL AGREEMENTS MANAGEMENT & LEGAL GENERATOR
+  // ---------------------------------------------------------------------------
+  getRentalAgreements(): RentalAgreement[] {
+    return loadOrInit<RentalAgreement[]>('rental_agreements', []);
+  }
+
+  getRentalAgreementByTenantId(tenantId: string): RentalAgreement | undefined {
+    const agreements = this.getRentalAgreements();
+    return agreements.find(a => a.tenant_id === tenantId);
+  }
+
+  saveRentalAgreement(agreement: RentalAgreement): RentalAgreement {
+    const agreements = this.getRentalAgreements();
+    const existingIdx = agreements.findIndex(a => a.id === agreement.id || a.tenant_id === agreement.tenant_id);
+    const now = new Date().toISOString();
+
+    let savedAgreement: RentalAgreement;
+    if (existingIdx !== -1) {
+      savedAgreement = {
+        ...agreements[existingIdx],
+        ...agreement,
+        updated_at: now
+      };
+      agreements[existingIdx] = savedAgreement;
+    } else {
+      savedAgreement = {
+        ...agreement,
+        id: agreement.id || `agr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        created_at: agreement.created_at || now,
+        updated_at: now
+      };
+      agreements.unshift(savedAgreement);
+    }
+
+    save('rental_agreements', agreements);
+    this.addAudit('agreement_saved', 'rental_agreement', savedAgreement.id, `Saved rental agreement for tenant "${savedAgreement.tenant_name}" (House ${savedAgreement.house_number}, ${savedAgreement.house_type}).`);
+    return savedAgreement;
+  }
+
+  deleteRentalAgreement(id: string): void {
+    const agreements = this.getRentalAgreements().filter(a => a.id !== id);
+    save('rental_agreements', agreements);
+  }
+
+  generateDefaultAgreementText(params: {
+    owner_name: string;
+    owner_phone: string;
+    owner_address: string;
+    owner_id_number?: string;
+    tenant_name: string;
+    tenant_phone: string;
+    tenant_aadhaar?: string;
+    tenant_permanent_address?: string;
+    property_name: string;
+    house_number: string;
+    property_address: string;
+    house_type: HouseType;
+    monthly_rent: number;
+    due_day: number;
+    deposit_amount: number;
+    start_date: string;
+    duration_months?: number;
+    notice_period_months?: number;
+    painting_option: PaintingOption;
+    painting_amount: number;
+  }): string {
+    const duration = params.duration_months || 11;
+    const notice = params.notice_period_months || 1;
+
+    let endDateStr = '';
+    try {
+      const sDate = new Date(params.start_date || new Date().toISOString().split('T')[0]);
+      sDate.setMonth(sDate.getMonth() + duration);
+      sDate.setDate(sDate.getDate() - 1);
+      endDateStr = sDate.toISOString().split('T')[0];
+    } catch {
+      endDateStr = '11 Months from commencement';
+    }
+
+    const rentWords = numberToIndianWords(params.monthly_rent);
+    const depositWords = numberToIndianWords(params.deposit_amount);
+    const paintingWords = numberToIndianWords(params.painting_amount);
+
+    const execDate = new Date(params.start_date || Date.now());
+    const day = execDate.getDate();
+    const month = execDate.toLocaleString('en-US', { month: 'long' });
+    const year = execDate.getFullYear();
+
+    const paintingClause = params.painting_option === 'with_painting'
+      ? `5. PAINTING & WHITEWASHING CLAUSE:
+   The Lessee explicitly agrees and acknowledges that the schedule premises are delivered in freshly painted, clean, and tenantable condition. At the time of vacating the schedule premises, a fixed sum of ₹${params.painting_amount.toLocaleString('en-IN')}/- (Rupees ${paintingWords} Only) shall be deducted by the Lessor from the refundable security deposit towards painting and whitewashing charges, OR alternatively, the Lessee shall handover the premises freshly painted at their own expense in the same color, quality, and finish as received.`
+      : `5. PAINTING & MAINTENANCE CLAUSE:
+   The Lessee shall maintain the schedule premises in good, clean, and tenantable condition and shall handover the premises in the same state at the time of vacating, subject to normal wear and tear. No separate painting deduction shall be applicable from the security deposit upon vacating, provided no willful damage has been caused to the walls or surfaces.`;
+
+    return `================================================================================
+                           RENTAL / LEASE AGREEMENT
+================================================================================
+
+This RENTAL / LEASE AGREEMENT is made and entered into on this ${day} day of ${month}, ${year}, by and between:
+
+LESSOR / LANDLORD (FIRST PARTY - OWNER):
+${params.owner_name}
+Residing at: ${params.owner_address || 'Bengaluru, Karnataka'}
+Contact Mobile: ${params.owner_phone || ''}
+ID / Aadhaar / PAN: ${params.owner_id_number || 'As per record'}
+(Hereinafter referred to as the "LESSOR", which expression shall, unless repugnant to the context, include legal heirs, executors, administrators, and assigns).
+
+                                      AND
+
+LESSEE / TENANT (SECOND PARTY):
+${params.tenant_name}
+Permanent Address: ${params.tenant_permanent_address || 'As per Aadhaar/KYC Records'}
+Contact Mobile: ${params.tenant_phone || ''}
+Aadhaar / ID Card No: ${params.tenant_aadhaar || 'As provided in records'}
+(Hereinafter referred to as the "LESSEE", which expression shall, unless repugnant to the context, include legal heirs, executors, administrators, and assigns).
+
+WHEREAS the Lessor is the absolute and lawful Owner of the Schedule Property detailed below and has agreed to let out the same to the Lessee for residential dwelling purpose on a monthly tenancy basis, and the Lessee has agreed to take the same on rent under the terms and conditions mutually agreed upon hereunder:
+
+SCHEDULE OF THE PROPERTY:
+All that residential premises bearing House / Flat No: ${params.house_number}, situated at ${params.property_name}, ${params.property_address || 'Bengaluru'}, consisting of a ${params.house_type} accommodation fitted with standard electrical connections, water supply, lighting fixtures, ceiling fans, and sanitary fittings.
+
+NOW THIS AGREEMENT WITNESSETH AND IS HEREBY MUTUALLY AGREED BY AND BETWEEN THE PARTIES HERETO AS FOLLOWS:
+
+1. TENANCY PERIOD & COMMENCEMENT:
+   The tenancy shall be for an initial period of ${duration} (${duration === 11 ? 'Eleven' : duration}) Months, commencing from ${params.start_date} to ${endDateStr}. The agreement may be extended or renewed for a further term upon mutual written consent of both parties with revision of rent as mutually agreed.
+
+2. MONTHLY RENT:
+   The Lessee agrees to pay a monthly rent of ₹${params.monthly_rent.toLocaleString('en-IN')}/- (Rupees ${rentWords} Only) for the schedule premises. The rent shall be payable in advance on or before the ${params.due_day}th day of each calendar month without any delay or default.
+
+3. SECURITY DEPOSIT:
+   The Lessee has deposited an interest-free refundable Security Deposit of ₹${params.deposit_amount.toLocaleString('en-IN')}/- (Rupees ${depositWords} Only) with the Lessor. This security deposit shall remain with the Lessor during the subsistence of tenancy and shall be refunded to the Lessee at the time of vacating and handing over peaceful possession of the premises, subject to deductions towards unpaid rent, electricity/water dues, damages (if any), and painting charges as stipulated in Clause 5 below.
+
+4. ELECTRICITY & WATER CHARGES:
+   The Lessee shall regularly pay the actual electricity charges according to the sub-meter / meter reading directly to the electricity authorities or to the Lessor. Water and local maintenance charges (if applicable) shall be paid promptly by the Lessee.
+
+${paintingClause}
+
+6. PURPOSE & POSSESSION:
+   The schedule premises shall be used strictly and exclusively for residential dwelling purposes only by the Lessee and their immediate family members. The Lessee shall not sublet, assign, mortgage, or underlet the premises or any part thereof to any third party under any circumstances.
+
+7. MAINTENANCE & DAMAGES:
+   The Lessee shall keep and maintain the interior of the premises, fixtures, fittings, electrical points, taps, and sanitary installations in good, clean, and tenable condition. Any minor day-to-day repairs, fused bulbs, or tap washers shall be borne by the Lessee. Major structural repairs (if any not caused by Lessee's negligence) shall be the responsibility of the Lessor.
+
+8. PROHIBITIONS & CONDUCT:
+   The Lessee shall not store any hazardous, combustible, inflammable, or illegal articles in the premises. The Lessee shall not create any nuisance or annoyance to the neighbors or other occupants of the building and shall abide by all community rules.
+
+9. INSPECTION BY LESSOR:
+   The Lessor or their authorized representative shall have full right to inspect the schedule premises at all reasonable hours during the daytime, after giving prior notice to the Lessee.
+
+10. NOTICE PERIOD & TERMINATION:
+   Either party may terminate this agreement before the expiry of the tenancy term by giving ${notice} (${notice === 1 ? 'One' : notice}) Month prior written notice or rent in lieu thereof. The Lessee shall peacefully hand over vacant possession of the premises upon expiry of the notice period or tenancy term.
+
+IN WITNESS WHEREOF, THE LESSOR AND THE LESSEE HAVE SIGNED AND EXECUTED THIS AGREEMENT ON THE DAY, MONTH, AND YEAR FIRST ABOVE WRITTEN IN THE PRESENCE OF THE WITNESSES ATTESTING HERETO:
+
+
+
+____________________________________             ____________________________________
+LESSOR / OWNER (FIRST PARTY)                     LESSEE / TENANT (SECOND PARTY)
+Name: ${params.owner_name}
+Mobile: ${params.owner_phone}                    Mobile: ${params.tenant_phone}
+
+
+
+WITNESSES:
+
+1. Signature: _______________________            2. Signature: _______________________
+   Name:      _______________________               Name:      _______________________
+   Address:   _______________________               Address:   _______________________
+   Mobile:    _______________________               Mobile:    _______________________
+`;
+  }
+
   // Rent Charges & Ledger
   getRentCharges(month?: string, propertyId?: string, status?: string): RentCharge[] {
-    let charges = loadOrInit('rent_charges', initialRentCharges);
+    let rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    let charges = deduplicateCharges(rawCharges);
+    if (charges.length !== rawCharges.length) {
+      saveLocalOnly('rent_charges', charges);
+    }
     if (month) {
       charges = charges.filter(c => c.period_month === month);
     }
@@ -1581,6 +2447,169 @@ class RentEasyApiService {
     );
 
     return { payment, receipt, remaining };
+  }
+
+  updateReceipt(receiptId: string, data: {
+    amount_paid?: number;
+    payment_date?: string;
+    payment_method?: PaymentMethod;
+    reference?: string;
+    receipt_number?: string;
+    period_month?: string;
+    unit_number?: string;
+    notes?: string;
+  }): { receipt: Receipt; payment: Payment | null; remaining: number } {
+    const receipts = loadOrInit<Receipt[]>('receipts', initialReceipts);
+    const receiptIndex = receipts.findIndex(r => r.id === receiptId || r.receipt_number === receiptId);
+    if (receiptIndex === -1) throw new Error('Receipt not found');
+    const receipt = receipts[receiptIndex];
+
+    const payments = loadOrInit<Payment[]>('payments', initialPayments);
+    const charges = loadOrInit<RentCharge[]>('rent_charges', initialRentCharges);
+
+    const oldAmount = Number(receipt.amount_paid) || 0;
+    const newAmount = data.amount_paid !== undefined ? Number(data.amount_paid) : oldAmount;
+    const amountDiff = newAmount - oldAmount;
+
+    // Find linked payment
+    const payIndex = payments.findIndex(p => p.id === receipt.payment_id || p.receipt_number === receipt.receipt_number);
+    let linkedPayment: Payment | null = null;
+    let chargeId: string | null = null;
+
+    if (payIndex !== -1) {
+      linkedPayment = payments[payIndex];
+      linkedPayment.amount = newAmount;
+      if (data.payment_date) linkedPayment.payment_date = data.payment_date;
+      if (data.payment_method) linkedPayment.method = data.payment_method;
+      if (data.reference) linkedPayment.reference = data.reference;
+      if (data.receipt_number) linkedPayment.receipt_number = data.receipt_number;
+      if (data.notes !== undefined) linkedPayment.notes = data.notes;
+      chargeId = linkedPayment.allocated_charge_id;
+    }
+
+    // Find allocated charge
+    let remaining = Number(receipt.outstanding_balance) || 0;
+    const chargeIndex = charges.findIndex(c =>
+      (chargeId && c.id === chargeId) ||
+      (c.tenant_name && c.tenant_name.trim().toLowerCase() === receipt.tenant_name.trim().toLowerCase() && c.period_month === receipt.period_month)
+    );
+
+    if (chargeIndex !== -1) {
+      const charge = charges[chargeIndex];
+      charge.amount_paid = Math.max(0, (Number(charge.amount_paid) || 0) + amountDiff);
+      charge.outstanding_balance = Math.max(0, (Number(charge.total_due) || 0) - charge.amount_paid);
+
+      if (charge.outstanding_balance <= 0) {
+        charge.status = 'paid';
+      } else if (charge.amount_paid > 0) {
+        charge.status = 'partially_paid';
+      } else {
+        const todayStr = new Date().toISOString().split('T')[0];
+        charge.status = charge.due_date < todayStr ? 'overdue' : 'pending';
+      }
+
+      remaining = charge.outstanding_balance;
+      charges[chargeIndex] = charge;
+      save('rent_charges', charges);
+
+      if (linkedPayment) {
+        linkedPayment.remaining_charge_balance = remaining;
+      }
+    } else {
+      remaining = Math.max(0, remaining - amountDiff);
+    }
+
+    if (linkedPayment && payIndex !== -1) {
+      payments[payIndex] = linkedPayment;
+      save('payments', payments);
+    }
+
+    // Update receipt fields
+    receipt.amount_paid = newAmount;
+    if (data.payment_date) {
+      receipt.issued_at = data.payment_date.includes('T') ? data.payment_date : `${data.payment_date}T12:00:00.000Z`;
+    }
+    if (data.payment_method) receipt.payment_method = data.payment_method;
+    if (data.reference) receipt.reference = data.reference;
+    if (data.receipt_number) receipt.receipt_number = data.receipt_number;
+    if (data.period_month) receipt.period_month = data.period_month;
+    if (data.unit_number) receipt.unit_number = data.unit_number;
+    receipt.outstanding_balance = remaining;
+
+    receipts[receiptIndex] = receipt;
+    save('receipts', receipts);
+
+    // Recalculate tenant live balances
+    this.recalculateTenantBalances();
+
+    this.addAudit(
+      'receipt_updated',
+      'receipt',
+      receipt.id,
+      `Edited payment receipt ${receipt.receipt_number} for "${receipt.tenant_name}" (${receipt.unit_number}). Amount: ₹${newAmount.toLocaleString('en-IN')}${amountDiff !== 0 ? ` (was ₹${oldAmount.toLocaleString('en-IN')})` : ''}, Method: ${receipt.payment_method}, Ref: ${receipt.reference}. Remaining balance: ₹${remaining.toLocaleString('en-IN')}.`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'receipt_updated', receiptId: receipt.id } }));
+    }
+
+    return { receipt, payment: linkedPayment, remaining };
+  }
+
+  deleteReceipt(receiptId: string): boolean {
+    const receipts = loadOrInit<Receipt[]>('receipts', initialReceipts);
+    const receiptIndex = receipts.findIndex(r => r.id === receiptId || r.receipt_number === receiptId);
+    if (receiptIndex === -1) return false;
+
+    const receipt = receipts[receiptIndex];
+    const payments = loadOrInit<Payment[]>('payments', initialPayments);
+    const charges = loadOrInit<RentCharge[]>('rent_charges', initialRentCharges);
+
+    // Find linked payment
+    const payIndex = payments.findIndex(p => p.id === receipt.payment_id || p.receipt_number === receipt.receipt_number);
+    let chargeId: string | null = null;
+    const amount = Number(receipt.amount_paid) || 0;
+
+    if (payIndex !== -1) {
+      chargeId = payments[payIndex].allocated_charge_id;
+      payments.splice(payIndex, 1);
+      save('payments', payments);
+    }
+
+    // Restore charge
+    const chargeIndex = charges.findIndex(c =>
+      (chargeId && c.id === chargeId) ||
+      (c.tenant_name && c.tenant_name.trim().toLowerCase() === receipt.tenant_name.trim().toLowerCase() && c.period_month === receipt.period_month)
+    );
+
+    if (chargeIndex !== -1) {
+      const charge = charges[chargeIndex];
+      charge.amount_paid = Math.max(0, (Number(charge.amount_paid) || 0) - amount);
+      charge.outstanding_balance = Math.max(0, (Number(charge.total_due) || 0) - charge.amount_paid);
+
+      if (charge.outstanding_balance <= 0) {
+        charge.status = 'paid';
+      } else if (charge.amount_paid > 0) {
+        charge.status = 'partially_paid';
+      } else {
+        const todayStr = new Date().toISOString().split('T')[0];
+        charge.status = charge.due_date < todayStr ? 'overdue' : 'pending';
+      }
+      charges[chargeIndex] = charge;
+      save('rent_charges', charges);
+    }
+
+    receipts.splice(receiptIndex, 1);
+    save('receipts', receipts);
+
+    this.recalculateTenantBalances();
+    this.addAudit('receipt_deleted', 'receipt', receipt.id, `Deleted payment receipt ${receipt.receipt_number} for ${receipt.tenant_name} (₹${amount}). Restored charge balance.`);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'receipt_deleted', receiptId } }));
+    }
+
+    return true;
   }
 
   getReceipts(): Receipt[] {
@@ -2008,13 +3037,15 @@ class RentEasyApiService {
       landlord,
       properties,
       tenants,
-      leases: [],
-      rent_charges: charges,
+      leases: loadOrInit<Lease[]>('leases', []),
+      rent_charges: deduplicateCharges(charges),
       payments,
       receipts,
       message_jobs: messageJobs,
       audit_logs: auditLogs,
-      auth_credentials: authCreds
+      auth_credentials: authCreds,
+      property_owners: this.getOwners(),
+      rental_agreements: this.getRentalAgreements()
     };
   }
 
@@ -2024,6 +3055,9 @@ class RentEasyApiService {
     }
 
     try {
+      // Create safety snapshot of whatever was there before restoring
+      this.createSafetySnapshot('pre_manual_restore');
+
       // 1. Unwrap common export containers (data, backup, state, etc.)
       let root = payload;
       if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
@@ -2277,12 +3311,12 @@ class RentEasyApiService {
         }
       });
 
-      // 5. Ensure Leases exist
+      // 5. Ensure Leases exist (Preserve existing active_lease_id!)
       const normalizedLeases: Lease[] = [...rawLeases];
       normalizedTenants.forEach(t => {
-        if (!t.active_lease_id || !normalizedLeases.some(l => l.id === t.active_lease_id)) {
-          const leaseId = `lease-${Date.now()}-${t.id}`;
-          t.active_lease_id = leaseId;
+        const leaseId = t.active_lease_id || `lease-${t.id}`;
+        t.active_lease_id = leaseId;
+        if (!normalizedLeases.some(l => l.id === leaseId)) {
           normalizedLeases.push({
             id: leaseId,
             property_id: t.property_id || normalizedProperties[0].id,
@@ -2298,7 +3332,7 @@ class RentEasyApiService {
         }
       });
 
-      // 6. Normalize Rent Charges
+      // 6. Normalize Rent Charges & link with active tenants
       const normalizedCharges: RentCharge[] = rawCharges.map((c: any, idx: number) => {
         const id = c.id || `chg-${Date.now()}-${idx}`;
         const rentAmt = Number(c.rent_amount || c.amount || 0);
@@ -2307,15 +3341,22 @@ class RentEasyApiService {
         const amtPaid = Number(c.amount_paid || 0);
         const outBal = Number(c.outstanding_balance !== undefined ? c.outstanding_balance : Math.max(0, totalDue - amtPaid));
 
+        // Link with tenant if matching
+        const matchedTenant = normalizedTenants.find(
+          t => (c.lease_id && t.active_lease_id === c.lease_id) ||
+               (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase()) ||
+               (c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase())
+        );
+
         return {
           id,
-          lease_id: c.lease_id || `lease-${idx}`,
-          property_name: c.property_name || 'House',
-          unit_number: c.unit_number || 'Unit',
-          tenant_name: c.tenant_name || 'Tenant',
-          tenant_phone: c.tenant_phone || '+91 99999 99999',
+          lease_id: matchedTenant?.active_lease_id || c.lease_id || `lease-${idx}`,
+          property_name: matchedTenant?.linked_property_name || c.property_name || 'House',
+          unit_number: matchedTenant?.house_number || c.unit_number || 'Unit',
+          tenant_name: matchedTenant?.name || c.tenant_name || 'Tenant',
+          tenant_phone: matchedTenant?.phone || c.tenant_phone || '+91 99999 99999',
           period_month: c.period_month || c.month || currentMonth,
-          rent_amount: rentAmt,
+          rent_amount: rentAmt || (matchedTenant?.monthly_rent || 0),
           other_charges: otherAmt,
           total_due: totalDue,
           amount_paid: amtPaid,
@@ -2326,10 +3367,14 @@ class RentEasyApiService {
         };
       });
 
-      // If active tenants don't have charges for currentMonth, synthesize them
+      // If active tenants don't have charges for currentMonth, synthesize them (never duplicate!)
       normalizedTenants.filter(t => t.status === 'active').forEach(t => {
         const hasCharge = normalizedCharges.some(
-          c => (c.lease_id === t.active_lease_id || c.tenant_name === t.name) && c.period_month === currentMonth
+          c =>
+            c.period_month === currentMonth &&
+            (c.lease_id === t.active_lease_id ||
+              (c.tenant_name && t.name && c.tenant_name.trim().toLowerCase() === t.name.trim().toLowerCase()) ||
+              (c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase()))
         );
         if (!hasCharge && t.monthly_rent > 0) {
           const dueDayStr = String(t.due_day || 5).padStart(2, '0');
@@ -2337,7 +3382,7 @@ class RentEasyApiService {
           normalizedCharges.unshift({
             id: `chg-${Date.now()}-${t.id}`,
             lease_id: t.active_lease_id!,
-            property_name: t.linked_property_name || 'Property',
+            property_name: t.linked_property_name || 'House',
             unit_number: t.house_number,
             tenant_name: t.name,
             tenant_phone: t.phone,
@@ -2353,6 +3398,9 @@ class RentEasyApiService {
           });
         }
       });
+
+      // Deduplicate charges to guarantee clean, non-duplicated ledger
+      const finalCharges = deduplicateCharges(normalizedCharges);
 
       // 7. Normalize Payments & Receipts
       const normalizedPayments: Payment[] = rawPayments.map((p: any, idx: number) => ({
@@ -2394,11 +3442,13 @@ class RentEasyApiService {
       save('properties', normalizedProperties);
       save('tenants', normalizedTenants);
       save('leases', normalizedLeases);
-      save('rent_charges', normalizedCharges);
+      save('rent_charges', finalCharges);
       save('payments', normalizedPayments);
       save('receipts', normalizedReceipts);
       if (root.message_jobs) save('message_jobs', root.message_jobs);
       if (root.auth_credentials) save('auth_credentials', root.auth_credentials);
+      if (root.property_owners) save('property_owners', root.property_owners);
+      if (root.rental_agreements) save('rental_agreements', root.rental_agreements);
 
       // 9. Recalculate and Synchronize to Central Server & Windows
       this.recalculateTenantBalances();
@@ -2626,6 +3676,67 @@ class RentEasyApiService {
     return session;
   }
 
+  createUserWithGoogle(email: string, name?: string): { session: GoogleDriveSession; landlord: Landlord } {
+    const cleanEmail = email.trim();
+    const cleanName = (name && name.trim()) || cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
+    const formattedName = cleanName
+      .split(/\s+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+
+    // 1. Establish Google Drive session with autoBackup active
+    const session: GoogleDriveSession = {
+      isConnected: true,
+      email: cleanEmail,
+      name: formattedName,
+      connectedAt: new Date().toISOString(),
+      autoBackup: true,
+      folderName: 'RentEasy Backups'
+    };
+    save('gdrive_session', session);
+
+    // 2. Set Landlord Profile to the Google user
+    const currentLl = this.getLandlord();
+    const updatedLandlord: Landlord = {
+      ...currentLl,
+      name: formattedName,
+      email: cleanEmail,
+      company_name: currentLl.company_name && currentLl.company_name !== 'RentEasy Portfolio' && currentLl.company_name !== 'Sharma Estates & Prime Rentals'
+        ? currentLl.company_name
+        : `${formattedName}'s Properties`
+    };
+    this.updateLandlord(updatedLandlord);
+
+    // 3. Update auth credentials
+    this.updateAuthCredentials(cleanEmail, 'google_authenticated');
+
+    // 4. Set persistent session tokens
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('renteasy_auth_token', 'true');
+      localStorage.setItem('renteasy_logged_in_email', cleanEmail);
+      localStorage.setItem('renteasy_auth_provider', 'google');
+      localStorage.setItem('renteasy_user_name', formattedName);
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('renteasy_explicit_logout');
+    }
+
+    // 5. Audit log
+    this.addAudit('user_created_google', 'auth', 'landlord', `Created & connected user account via Google Account (${cleanEmail} - ${formattedName}). Automatic Google Drive backup activated.`);
+
+    // 6. Seed cloud backup immediately
+    this.saveCloudBackupToGoogleDrive(false);
+
+    // 7. Push to sync server
+    this.pushCurrentDatabaseToServer();
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'google_signup' } }));
+    }
+
+    return { session, landlord: updatedLandlord };
+  }
+
   logoutGoogleDrive(): void {
     const prev = this.getGoogleDriveSession();
     save('gdrive_session', {
@@ -2777,6 +3888,11 @@ class RentEasyApiService {
           revision: _currentLocalRevision
         });
         return true;
+      } else if (res.status === 409) {
+        console.log('[RentEasy Sync] Push rejected due to newer server revision. Pulling server updates...');
+        this.updateSyncStatus({ isSyncing: false, isLiveConnected: true, isHostReachable: true });
+        await this.pullDatabaseFromServer();
+        return false;
       } else {
         this.updateSyncStatus({ isSyncing: false, isLiveConnected: false });
         return false;
@@ -2786,6 +3902,46 @@ class RentEasyApiService {
       this.updateSyncStatus({ isSyncing: false, isHostReachable: false, isLiveConnected: false });
       return false;
     }
+  }
+
+  // Automatic safety snapshot creation & recovery
+  createSafetySnapshot(trigger: string): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const payload = this.getCompleteBackupData();
+      const snapshot = {
+        timestamp: new Date().toISOString(),
+        trigger,
+        data: payload
+      };
+      localStorage.setItem('renteasy_auto_safety_backup', JSON.stringify(snapshot));
+    } catch (e) {
+      console.warn('Failed to save safety snapshot:', e);
+    }
+  }
+
+  getSafetySnapshot(): { timestamp: string; trigger: string; data: RentEasyBackupPayload } | null {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('renteasy_auto_safety_backup');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  restoreSafetySnapshot(): { success: boolean; message: string } {
+    const snap = this.getSafetySnapshot();
+    if (!snap || !snap.data) {
+      return { success: false, message: 'No safety snapshot found to restore.' };
+    }
+    const res = this.restoreBackupData(snap.data);
+    return {
+      success: res.success,
+      message: res.success
+        ? `Successfully restored safety snapshot from ${new Date(snap.timestamp).toLocaleString()}!`
+        : res.message
+    };
   }
 
   async pullDatabaseFromServer(): Promise<boolean> {
@@ -2810,24 +3966,62 @@ class RentEasyApiService {
       }
 
       if (json.exists && json.data) {
-        // Hydrate local storage with remote database
-        this.applyServerData(json.data);
-        _currentLocalRevision = json.revision || Date.now();
-        try {
-          localStorage.setItem('renteasy_sync_revision', String(_currentLocalRevision));
-        } catch (e) {}
+        autoMigratePortfolioUnitFormat();
+        const serverData = json.data;
+        const serverRevision = Number(json.revision) || 0;
+        const localRevision = _currentLocalRevision || 0;
+        const serverIsDemo = isStockDemoPayload(serverData);
+        const localHasCustom = hasLocalUserCustomData();
 
+        // 1. SAFEGUARD: If local client has real customized properties/tenants and the server only has stock demo data,
+        // NEVER let the demo data overwrite the user's real data! Instead, promote local data to server!
+        if (localHasCustom && serverIsDemo) {
+          console.log('[RentEasy Sync] Local client has custom user data; server is holding stock demo data. Pushing local portfolio to server...');
+          await this.pushCurrentDatabaseToServer();
+          return true;
+        }
+
+        // 2. SAFEGUARD: If local data is newer than server data, push local data to server
+        if (localHasCustom && !serverIsDemo && localRevision > serverRevision) {
+          console.log(`[RentEasy Sync] Local portfolio is newer (Rev ${localRevision} > Server Rev ${serverRevision}). Syncing upwards to server...`);
+          await this.pushCurrentDatabaseToServer();
+          return true;
+        }
+
+        // 3. APPLY: Only apply server data if server has a higher revision OR if local only had uncustomized demo data
+        if (serverRevision > localRevision || (!localHasCustom && !serverIsDemo)) {
+          console.log(`[RentEasy Sync] Applying server update (Server Rev: ${serverRevision} > Local Rev: ${localRevision}).`);
+          this.createSafetySnapshot('pre_server_pull');
+          this.applyServerData(serverData);
+          autoMigratePortfolioUnitFormat();
+          _currentLocalRevision = serverRevision;
+          try {
+            localStorage.setItem('renteasy_sync_revision', String(_currentLocalRevision));
+          } catch (e) {}
+
+          const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          this.updateSyncStatus({
+            isSyncing: false,
+            isLiveConnected: true,
+            isHostReachable: true,
+            lastSyncedAt: nowTime,
+            revision: _currentLocalRevision
+          });
+
+          // Broadcast to React components so active pages update immediately!
+          window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'remote_pull', revision: serverRevision } }));
+          return true;
+        }
+
+        // 4. Same revision or local already up to date
         const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         this.updateSyncStatus({
           isSyncing: false,
           isLiveConnected: true,
           isHostReachable: true,
           lastSyncedAt: nowTime,
-          revision: _currentLocalRevision
+          revision: localRevision
         });
-
-        // Broadcast to React components so active pages update immediately!
-        window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'remote_pull', revision: json.revision } }));
         return true;
       } else {
         // Server database file is not yet populated; seed server with our current dataset
@@ -2858,9 +4052,14 @@ class RentEasyApiService {
 
       const json = await res.json();
       if (json.success && typeof json.revision === 'number') {
-        if (json.revision > _currentLocalRevision) {
-          console.log(`[RentEasy Sync] Remote change detected (Server rev: ${json.revision} > Local: ${_currentLocalRevision}). Pulling updates live...`);
+        const serverRev = json.revision;
+        const localRev = _currentLocalRevision;
+        if (serverRev > localRev) {
+          console.log(`[RentEasy Sync] Remote change detected (Server rev: ${serverRev} > Local: ${localRev}). Pulling updates live...`);
           await this.pullDatabaseFromServer();
+        } else if (localRev > serverRev && hasLocalUserCustomData()) {
+          // Local has newer changes that haven't reached server yet
+          await this.pushCurrentDatabaseToServer();
         } else {
           if (!this._syncStatus.isLiveConnected || !this._syncStatus.isHostReachable) {
             this.updateSyncStatus({ isLiveConnected: true, isHostReachable: true });
@@ -2887,6 +4086,8 @@ class RentEasyApiService {
       if (payload.message_jobs) saveLocalOnly('message_jobs', payload.message_jobs);
       if (payload.audit_logs) saveLocalOnly('audit_logs', payload.audit_logs);
       if (payload.auth_credentials) saveLocalOnly('auth_credentials', payload.auth_credentials);
+      if (payload.property_owners) saveLocalOnly('property_owners', payload.property_owners);
+      if (payload.rental_agreements) saveLocalOnly('rental_agreements', payload.rental_agreements);
     } finally {
       _isApplyingRemoteSync = false;
     }
@@ -2894,6 +4095,9 @@ class RentEasyApiService {
 
   async forceSyncNow(): Promise<boolean> {
     console.log('[RentEasy Sync] Force manual synchronization requested...');
+    if (hasLocalUserCustomData()) {
+      await this.pushCurrentDatabaseToServer();
+    }
     const pulled = await this.pullDatabaseFromServer();
     return pulled;
   }
