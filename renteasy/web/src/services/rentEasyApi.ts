@@ -3749,6 +3749,160 @@ WITNESSES:
     this.addAudit('google_drive_disconnected', 'system', 'google_drive', `Disconnected Google Drive account (${prev.email || 'user'}).`);
   }
 
+  getGoogleClientId(): string {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem('renteasy_google_client_id') || '';
+    }
+    return '';
+  }
+
+  setGoogleClientId(clientId: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('renteasy_google_client_id', clientId.trim());
+    }
+    const session = this.getGoogleDriveSession();
+    session.clientId = clientId.trim();
+    save('gdrive_session', session);
+  }
+
+  setGoogleDriveOAuthSession(token: string, expiresInSec: number, email: string, name: string, avatarUrl?: string): GoogleDriveSession {
+    const cleanEmail = email.trim();
+    const cleanName = name || cleanEmail.split('@')[0];
+    const session: GoogleDriveSession = {
+      isConnected: true,
+      email: cleanEmail,
+      name: cleanName,
+      avatarUrl: avatarUrl || '',
+      connectedAt: new Date().toISOString(),
+      autoBackup: true,
+      folderName: 'RentEasy Backups',
+      accessToken: token,
+      tokenExpiresAt: Date.now() + (expiresInSec * 1000)
+    };
+    save('gdrive_session', session);
+
+    // Update landlord profile
+    const currentLl = this.getLandlord();
+    this.updateLandlord({
+      ...currentLl,
+      name: cleanName,
+      email: cleanEmail
+    });
+
+    this.addAudit('google_drive_oauth_connected', 'auth', 'google_drive', `Authenticated via real Google OAuth (${cleanEmail}).`);
+    return session;
+  }
+
+  async fetchRealGoogleDriveBackups(): Promise<GoogleDriveCloudBackup[]> {
+    const session = this.getGoogleDriveSession();
+    if (!session.accessToken) {
+      return this.getGoogleDriveCloudBackups();
+    }
+
+    try {
+      const q = encodeURIComponent("name contains 'RentEasy_Backup' and trashed = false");
+      const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,size,webViewLink)&orderBy=createdTime desc`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${session.accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        console.warn('[RentEasy Drive] Failed to list files from Google Drive:', res.statusText);
+        return this.getGoogleDriveCloudBackups();
+      }
+
+      const json = await res.json();
+      const driveFiles: GoogleDriveCloudBackup[] = (json.files || []).map((f: any) => ({
+        id: f.id,
+        googleDriveFileId: f.id,
+        fileName: f.name,
+        savedAt: f.createdTime,
+        sizeBytes: parseInt(f.size || '0', 10),
+        propertiesCount: 0,
+        tenantsCount: 0,
+        chargesCount: 0,
+        paymentsCount: 0,
+        driveWebViewLink: f.webViewLink,
+        isRealDrive: true,
+        data: {} as any
+      }));
+
+      // Merge with local snapshots
+      const localBackups = this.getGoogleDriveCloudBackups().filter(b => !b.isRealDrive);
+      const combined = [...driveFiles, ...localBackups];
+      save('gdrive_cloud_backups', combined);
+      return combined;
+    } catch (e) {
+      console.error('[RentEasy Drive] Error fetching from Google Drive API:', e);
+      return this.getGoogleDriveCloudBackups();
+    }
+  }
+
+  async uploadToRealGoogleDrive(filename: string, jsonStr: string): Promise<any> {
+    const session = this.getGoogleDriveSession();
+    if (!session.accessToken) {
+      return null;
+    }
+
+    const metadata = {
+      name: filename,
+      mimeType: 'application/json',
+      description: 'RentEasy Rental Portfolio Complete Backup'
+    };
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const multipartRequestBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: application/json\r\n\r\n' +
+      jsonStr +
+      closeDelimiter;
+
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`
+      },
+      body: multipartRequestBody
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      console.log('[RentEasy Drive] Successfully uploaded backup to Google Drive:', data);
+      return data;
+    }
+    return null;
+  }
+
+  async downloadFromRealGoogleDrive(fileId: string): Promise<any> {
+    const session = this.getGoogleDriveSession();
+    if (!session.accessToken) {
+      throw new Error('Not connected to Google Drive.');
+    }
+
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`
+      }
+    });
+
+    if (!res.ok) {
+      throw new Error(`Google Drive download failed: ${res.statusText}`);
+    }
+
+    const json = await res.json();
+    return json;
+  }
+
   updateGoogleDriveAutoBackup(enabled: boolean): void {
     const session = this.getGoogleDriveSession();
     session.autoBackup = enabled;
@@ -3780,6 +3934,19 @@ WITNESSES:
       data: backupData
     };
 
+    if (session.accessToken) {
+      try {
+        const driveResult = await this.uploadToRealGoogleDrive(filename, jsonStr);
+        if (driveResult && driveResult.id) {
+          newCloudBackup.googleDriveFileId = driveResult.id;
+          newCloudBackup.isRealDrive = true;
+          newCloudBackup.driveWebViewLink = driveResult.webViewLink;
+        }
+      } catch (e) {
+        console.warn('[RentEasy Drive] Real Drive upload notice:', e);
+      }
+    }
+
     const backups = this.getGoogleDriveCloudBackups();
     backups.unshift(newCloudBackup);
     save('gdrive_cloud_backups', backups.slice(0, 20)); // Keep last 20 snapshots
@@ -3799,14 +3966,24 @@ WITNESSES:
     return newCloudBackup;
   }
 
-  restoreFromGoogleDriveBackup(backupId: string): { success: boolean; message: string; stats?: any } {
+  async restoreFromGoogleDriveBackup(backupId: string): Promise<{ success: boolean; message: string; stats?: any }> {
     const backups = this.getGoogleDriveCloudBackups();
     const target = backups.find(b => b.id === backupId);
     if (!target) {
       return { success: false, message: 'Selected Google Drive backup could not be found.' };
     }
 
-    const res = this.restoreBackupData(target.data);
+    let backupDataToRestore = target.data;
+    if (target.isRealDrive && target.googleDriveFileId) {
+      try {
+        const driveData = await this.downloadFromRealGoogleDrive(target.googleDriveFileId);
+        backupDataToRestore = driveData.data || driveData;
+      } catch (err: any) {
+        return { success: false, message: `Failed to download from Google Drive: ${err.message}` };
+      }
+    }
+
+    const res = this.restoreBackupData(backupDataToRestore);
     if (res.success) {
       this.addAudit(
         'google_drive_backup_restored',

@@ -43,6 +43,9 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
   const [googleEmail, setGoogleEmail] = useState<string>(session.email || landlord.email || '');
   const [googleName, setGoogleName] = useState<string>(session.name || landlord.name || '');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [clientId, setClientId] = useState<string>(() => rentEasyApi.getGoogleClientId());
+  const [showApiSettings, setShowApiSettings] = useState<boolean>(false);
+  const [clientIdSavedNotice, setClientIdSavedNotice] = useState<string>('');
 
   // Cloud action states
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -83,7 +86,89 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
     return kb + ' KB';
   };
 
-  // 1. GOOGLE LOGIN & USER LINKING HANDLER
+  React.useEffect(() => {
+    if (session.accessToken) {
+      rentEasyApi.fetchRealGoogleDriveBackups().then(backups => {
+        setCloudBackups(backups);
+      });
+    }
+  }, [session.accessToken]);
+
+  // 1. GOOGLE LOGIN & USER LINKING HANDLER (REAL GOOGLE OAUTH + FALLBACK)
+  const handleRealGoogleOAuth = () => {
+    const effectiveClientId = clientId.trim() || rentEasyApi.getGoogleClientId();
+    if (!effectiveClientId) {
+      setShowApiSettings(true);
+      alert('Please enter your Google Cloud OAuth Client ID below to connect directly with your real Google Drive.');
+      return;
+    }
+
+    if (typeof window === 'undefined' || !(window as any).google?.accounts?.oauth2) {
+      alert('Google Identity Services library is still loading. Please try again in a few seconds or check your internet connection.');
+      return;
+    }
+
+    try {
+      setIsLoggingIn(true);
+      const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: effectiveClientId,
+        scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            try {
+              // Fetch verified user profile from Google
+              const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+              });
+              const profile = await userRes.json();
+              const newSession = rentEasyApi.setGoogleDriveOAuthSession(
+                tokenResponse.access_token,
+                tokenResponse.expires_in || 3600,
+                profile.email || googleEmail,
+                profile.name || googleName,
+                profile.picture
+              );
+              setSession(newSession);
+              setGoogleEmail(newSession.email);
+              setGoogleName(newSession.name);
+
+              // Immediately fetch existing real backups from Google Drive!
+              setCloudNotice('Connecting to Google Drive and scanning for previous backups...');
+              const realBackups = await rentEasyApi.fetchRealGoogleDriveBackups();
+              setCloudBackups(realBackups);
+              setCloudNotice(`Verified Google Account: ${newSession.email}. Connected to real Google Drive! Found ${realBackups.length} previous backup snapshots.`);
+            } catch (err: any) {
+              setCloudNotice(`Authenticated with Google, but failed to fetch profile: ${err.message}`);
+            } finally {
+              setIsLoggingIn(false);
+            }
+          } else {
+            setIsLoggingIn(false);
+            if (tokenResponse && tokenResponse.error) {
+              alert(`Google Sign-In notice: ${tokenResponse.error}`);
+            }
+          }
+        }
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (err: any) {
+      setIsLoggingIn(false);
+      alert(`Could not start Google sign in: ${err.message}`);
+    }
+  };
+
+  const handleSaveClientId = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!clientId.trim()) {
+      alert('Please enter a valid Google Client ID.');
+      return;
+    }
+    rentEasyApi.setGoogleClientId(clientId.trim());
+    setClientIdSavedNotice('Google Client ID saved! Now tap "Sign In with Google" above.');
+    setTimeout(() => setClientIdSavedNotice(''), 4000);
+  };
+
   const handleGoogleSignIn = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!googleEmail || !googleEmail.includes('@')) {
@@ -97,8 +182,8 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
       setSession(newSession);
       setCloudBackups(rentEasyApi.getGoogleDriveCloudBackups());
       setIsLoggingIn(false);
-      setCloudNotice(`Successfully linked Google Account (${newSession.email}). Automatic Google Drive cloud backup is ACTIVE!`);
-    }, 600);
+      setCloudNotice(`Linked profile to (${newSession.email}). Automatic cloud backup is active.`);
+    }, 400);
   };
 
   const handleToggleAutoBackup = () => {
@@ -139,7 +224,7 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
   };
 
   // 3. RESTORE DIRECTLY FROM GOOGLE DRIVE CLOUD
-  const handleRestoreFromCloud = (backupId: string) => {
+  const handleRestoreFromCloud = async (backupId: string) => {
     const target = cloudBackups.find(b => b.id === backupId);
     if (!target) return;
 
@@ -148,8 +233,8 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
     }
 
     setIsRestoringId(backupId);
-    setTimeout(() => {
-      const res = rentEasyApi.restoreFromGoogleDriveBackup(backupId);
+    try {
+      const res = await rentEasyApi.restoreFromGoogleDriveBackup(backupId);
       setIsRestoringId(null);
 
       if (res.success) {
@@ -160,7 +245,10 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
       } else {
         alert(res.message);
       }
-    }, 500);
+    } catch (err: any) {
+      setIsRestoringId(null);
+      alert(`Restore failed: ${err.message}`);
+    }
   };
 
   const handleDeleteCloudBackup = (backupId: string) => {
@@ -482,12 +570,108 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
               </div>
 
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>
-                  Log In to Google Drive
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#fff' }}>
+                  Connect to Official Google Drive
                 </h3>
-                <p style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: '440px' }}>
-                  Sign in with your Google Account to automatically store, sync, and restore your rental properties, tenants, and ledger directly in Google Drive.
+                <p style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: '460px' }}>
+                  Authenticate directly with your Google Account to automatically store, sync, and restore your rental properties, tenants, and ledger in Google Drive across all your devices.
                 </p>
+              </div>
+
+              {/* Official Google OAuth Sign In Button */}
+              <div style={{ width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleRealGoogleOAuth}
+                  disabled={isLoggingIn}
+                  style={{
+                    background: '#ffffff',
+                    color: '#1f2937',
+                    border: '1px solid #d1d5db',
+                    padding: '12px 18px',
+                    fontSize: '0.94rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.94 0 12s.45 3.84 1.24 5.42l4.04-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>{isLoggingIn ? 'Connecting to Google...' : 'Sign In with Google Account'}</span>
+                </button>
+
+                {/* Google Client ID Setup Accordion */}
+                <div style={{ textAlign: 'center', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowApiSettings(!showApiSettings)}
+                    style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {showApiSettings ? 'Hide Google API Client Setup' : '⚙️ Configure Google Cloud Client ID (Required for Google popup)'}
+                  </button>
+                </div>
+
+                {showApiSettings && (
+                  <div
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      marginTop: '6px',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e2e8f0', marginBottom: '4px', display: 'block' }}>
+                      Google Cloud OAuth Client ID:
+                    </label>
+                    <input
+                      type="text"
+                      value={clientId}
+                      onChange={e => setClientId(e.target.value)}
+                      placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                      className="form-input"
+                      style={{ fontSize: '0.8rem', padding: '8px 10px' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                      <a
+                        href="https://console.cloud.google.com/apis/credentials"
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ fontSize: '0.72rem', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <ExternalLink size={12} /> Get Client ID from Google Cloud
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleSaveClientId}
+                        style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                      >
+                        Save Client ID
+                      </button>
+                    </div>
+                    {clientIdSavedNotice && (
+                      <div style={{ color: '#34d399', fontSize: '0.72rem', marginTop: '6px' }}>
+                        {clientIdSavedNotice}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '8px 0' }}>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>or quick link by email</span>
+                  <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+                </div>
               </div>
 
               <form
@@ -497,24 +681,9 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
                   maxWidth: '380px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '12px',
-                  marginTop: '8px'
+                  gap: '12px'
                 }}
               >
-                <div style={{ textAlign: 'left' }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px', display: 'block' }}>
-                    Your Full Name:
-                  </label>
-                  <input
-                    type="text"
-                    value={googleName}
-                    onChange={e => setGoogleName(e.target.value)}
-                    placeholder="e.g. Mohammed Hussain"
-                    className="form-input"
-                    style={{ fontSize: '0.9rem' }}
-                  />
-                </div>
-
                 <div style={{ textAlign: 'left' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '4px', display: 'block' }}>
                     Google Account Email:
@@ -532,13 +701,11 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
 
                 <button
                   type="submit"
-                  className="btn btn-primary"
+                  className="btn btn-secondary"
                   style={{
-                    background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
-                    border: 'none',
-                    padding: '12px',
-                    fontSize: '0.92rem',
-                    fontWeight: 700,
+                    padding: '10px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -546,8 +713,8 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
                   }}
                   disabled={isLoggingIn}
                 >
-                  {isLoggingIn ? <RefreshCw size={18} className="spin" /> : <Cloud size={18} />}
-                  <span>Sign In & Enable Auto-Backup to Drive</span>
+                  <Cloud size={16} color="#4285F4" />
+                  <span>Link Email & Enable Auto-Backup</span>
                 </button>
               </form>
 

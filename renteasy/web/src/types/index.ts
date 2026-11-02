@@ -320,6 +320,9 @@ export interface GoogleDriveSession {
   connectedAt?: string;
   autoBackup: boolean;
   folderName: string;
+  accessToken?: string;
+  tokenExpiresAt?: number;
+  clientId?: string;
 }
 
 export interface GoogleDriveCloudBackup {
@@ -331,6 +334,9 @@ export interface GoogleDriveCloudBackup {
   tenantsCount: number;
   chargesCount: number;
   paymentsCount: number;
+  googleDriveFileId?: string;
+  driveWebViewLink?: string;
+  isRealDrive?: boolean;
   data: RentEasyBackupPayload;
 }
 
