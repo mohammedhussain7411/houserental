@@ -70,25 +70,32 @@ export function numberToIndianWords(num: number): string {
   return words.trim();
 }
 
+import defaultDbRaw from '../data/defaultDatabase.json';
+
+const defaultDb = (defaultDbRaw as any)?.data || defaultDbRaw;
+
 const STORAGE_KEY_PREFIX = 'renteasy_v3_';
 
-const initialLandlord: Landlord = {
+const initialLandlord: Landlord = defaultDb?.landlord || {
   id: 'll-001',
-  name: 'My Properties',
-  email: 'landlord@renteasy.app',
-  phone: '',
-  company_name: 'RentEasy Portfolio',
-  upi_id: '',
+  name: 'Mohammed Hussain',
+  email: 'mohammedhussain7411@gmail.com',
+  phone: '9738244056',
+  company_name: 'SFR Properties',
+  upi_id: 'fyasararafath1231@ybl',
   timezone: 'Asia/Kolkata'
 };
 
-const initialProperties: Property[] = [];
-const initialTenants: Tenant[] = [];
-const initialRentCharges: RentCharge[] = [];
-const initialPayments: Payment[] = [];
-const initialReceipts: Receipt[] = [];
-const initialMessageJobs: MessageJob[] = [];
-const initialAuditLogs: AuditLog[] = [];
+const initialProperties: Property[] = defaultDb?.properties || [];
+const initialTenants: Tenant[] = defaultDb?.tenants || [];
+const initialRentCharges: RentCharge[] = defaultDb?.rent_charges || [];
+const initialPayments: Payment[] = defaultDb?.payments || [];
+const initialReceipts: Receipt[] = defaultDb?.receipts || [];
+const initialMessageJobs: MessageJob[] = defaultDb?.message_jobs || [];
+const initialAuditLogs: AuditLog[] = defaultDb?.audit_logs || [];
+const initialLeases: Lease[] = defaultDb?.leases || [];
+const initialOwners: PropertyOwner[] = defaultDb?.property_owners || [];
+const initialAgreements: RentalAgreement[] = defaultDb?.rental_agreements || [];
 
 // LocalStorage & Real-Time Cross-Device Sync helpers
 export interface DeviceSyncStatus {
@@ -517,11 +524,50 @@ function loadOrInit<T>(key: string, defaultVal: T): T {
       localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultVal));
       return defaultVal;
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // If client had empty tenants/properties saved from prior session, auto-seed with default portfolio
+    if ((key === 'tenants' || key === 'properties') && Array.isArray(parsed) && parsed.length === 0 && Array.isArray(defaultVal) && defaultVal.length > 0) {
+      localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultVal));
+      return defaultVal;
+    }
+    // Also if landlord was default placeholder "My Properties", upgrade to actual landlord
+    if (key === 'landlord' && parsed && parsed.name === 'My Properties' && (defaultVal as any)?.name && (defaultVal as any).name !== 'My Properties') {
+      localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultVal));
+      return defaultVal;
+    }
+    return parsed;
   } catch {
     return defaultVal;
   }
 }
+
+function ensureInitialSeed(): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const rawTenants = localStorage.getItem(STORAGE_KEY_PREFIX + 'tenants');
+    const parsedTenants = rawTenants ? JSON.parse(rawTenants) : [];
+    const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
+    const parsedProps = rawProps ? JSON.parse(rawProps) : [];
+
+    // If either tenants or properties are missing or empty, seed from default database!
+    if ((!Array.isArray(parsedTenants) || parsedTenants.length === 0 || !Array.isArray(parsedProps) || parsedProps.length === 0) && initialTenants.length > 0) {
+      console.log('[RentEasy] Auto-seeding complete portfolio database (37 tenants, 3 properties)...');
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'landlord', JSON.stringify(initialLandlord));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'properties', JSON.stringify(initialProperties));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'tenants', JSON.stringify(initialTenants));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'leases', JSON.stringify(initialLeases));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'rent_charges', JSON.stringify(initialRentCharges));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'payments', JSON.stringify(initialPayments));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'receipts', JSON.stringify(initialReceipts));
+      if (initialOwners?.length) localStorage.setItem(STORAGE_KEY_PREFIX + 'property_owners', JSON.stringify(initialOwners));
+      if (initialAgreements?.length) localStorage.setItem(STORAGE_KEY_PREFIX + 'rental_agreements', JSON.stringify(initialAgreements));
+    }
+  } catch (err) {
+    console.warn('[RentEasy] Error in ensureInitialSeed:', err);
+  }
+}
+
+ensureInitialSeed();
 
 function saveLocalOnly<T>(key: string, val: T): void {
   try {
@@ -4277,6 +4323,27 @@ WITNESSES:
         ? `Successfully restored safety snapshot from ${new Date(snap.timestamp).toLocaleString()}!`
         : res.message
     };
+  }
+
+  restoreDefaultPortfolio(): { success: boolean; tenantCount: number; propertyCount: number } {
+    try {
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'landlord', JSON.stringify(initialLandlord));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'properties', JSON.stringify(initialProperties));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'tenants', JSON.stringify(initialTenants));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'leases', JSON.stringify(initialLeases));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'rent_charges', JSON.stringify(initialRentCharges));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'payments', JSON.stringify(initialPayments));
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'receipts', JSON.stringify(initialReceipts));
+      if (initialOwners?.length) localStorage.setItem(STORAGE_KEY_PREFIX + 'property_owners', JSON.stringify(initialOwners));
+      if (initialAgreements?.length) localStorage.setItem(STORAGE_KEY_PREFIX + 'rental_agreements', JSON.stringify(initialAgreements));
+      this.recalculateTenantBalances();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'portfolio_restored' } }));
+      }
+      return { success: true, tenantCount: initialTenants.length, propertyCount: initialProperties.length };
+    } catch (err: any) {
+      return { success: false, tenantCount: 0, propertyCount: 0 };
+    }
   }
 
   async pullDatabaseFromServer(): Promise<boolean> {

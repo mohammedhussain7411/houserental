@@ -512,6 +512,45 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="main-content">
+        {/* Mobile Empty Data Recovery Alert */}
+        {properties.length === 0 && (
+          <div style={{
+            background: 'linear-gradient(90deg, #1e1b4b 0%, #1e293b 100%)',
+            borderBottom: '1px solid #6366f1',
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+            zIndex: 100
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1rem' }}>📱</span>
+              <span style={{ fontSize: '0.85rem', color: '#e0e7ff', fontWeight: 600 }}>
+                Data not loaded on this mobile device yet?
+              </span>
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                rentEasyApi.restoreDefaultPortfolio();
+                setProperties(rentEasyApi.getProperties());
+                setCharges(rentEasyApi.getRentCharges());
+                setLandlord(rentEasyApi.getLandlord());
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%)',
+                fontWeight: 700,
+                fontSize: '0.82rem',
+                padding: '6px 16px'
+              }}
+            >
+              🔄 Load All 37 Tenants & Properties Now
+            </button>
+          </div>
+        )}
+
         {/* Top Navbar with Mode Switcher & Quick Actions */}
         <header className="top-bar">
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>

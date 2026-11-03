@@ -86,6 +86,18 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleRestorePortfolio = () => {
+    if (!window.confirm('Load complete portfolio (37 Tenants, 3 Properties, Charges & Receipts) onto this device?')) {
+      return;
+    }
+    const res = rentEasyApi.restoreDefaultPortfolio();
+    if (res.success) {
+      setMessage(`✅ Portfolio Loaded! ${res.tenantCount} tenants and ${res.propertyCount} properties are now active on your device.`);
+    } else {
+      setMessage('Failed to restore portfolio.');
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
@@ -265,6 +277,42 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
             <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
               Your customized tenants and properties are protected: updates to app code will <strong>never</strong> overwrite your entered data with demo records. Automatic safety backups are captured before every synchronization.
             </div>
+          </div>
+
+          {/* 1-Click Load Portfolio Data for Mobile */}
+          <div style={{
+            padding: '14px 16px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(99, 102, 241, 0.12) 100%)',
+            border: '1px solid rgba(56, 189, 248, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap'
+          }}>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 700, color: '#38bdf8' }}>
+                Load Complete Data (37 Tenants & Properties)
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#cbd5e1', marginTop: '3px' }}>
+                If your phone shows 0 tenants or empty list, tap this button to immediately populate all records.
+              </div>
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleRestorePortfolio}
+              style={{
+                background: 'linear-gradient(135deg, #0284c7 0%, #6366f1 100%)',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                padding: '8px 16px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🔄 Load My 37 Tenants Now
+            </button>
           </div>
 
           {/* QR Code and Mobile Connection Link */}

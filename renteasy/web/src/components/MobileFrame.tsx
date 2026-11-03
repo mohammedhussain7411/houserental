@@ -1,5 +1,5 @@
 import React from 'react';
-import { DeviceSyncStatus } from '../services/rentEasyApi';
+import { rentEasyApi, DeviceSyncStatus } from '../services/rentEasyApi';
 import {
   Home,
   Building2,
@@ -239,6 +239,37 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
 
         {/* Scrollable Screen Content */}
         <div className="phone-screen" style={{ paddingTop: '88px' }}>
+          {rentEasyApi.getTenants().length === 0 && (
+            <div style={{
+              margin: '12px 16px',
+              padding: '12px 14px',
+              backgroundColor: '#1e293b',
+              border: '1px solid #38bdf8',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#38bdf8' }}>
+                📱 Data not showing on your phone?
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>
+                Tap below to instantly restore your 37 tenants & units onto this mobile device:
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  rentEasyApi.restoreDefaultPortfolio();
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #0284c7 0%, #6366f1 100%)',
+                  fontWeight: 700
+                }}
+              >
+                🔄 Load 37 Tenants & Units
+              </button>
+            </div>
+          )}
           {children}
         </div>
 
