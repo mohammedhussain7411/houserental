@@ -13,6 +13,7 @@ import {
   Smartphone,
   RefreshCw,
   Cloud,
+  HardDrive,
   Settings,
   Users,
   Monitor
@@ -191,27 +192,27 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
               <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
             </button>
 
-            {/* Google Drive / Login Button */}
+            {/* Backup & Restore Button */}
             {onOpenGoogleDriveBackup && (
               <button
                 onClick={onOpenGoogleDriveBackup}
-                title="Google Drive Backup & Login"
+                title="Backup & Restore (Local Download & Google Drive)"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  background: 'rgba(66, 133, 244, 0.15)',
-                  border: '1px solid rgba(66, 133, 244, 0.4)',
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  border: '1px solid rgba(99, 102, 241, 0.4)',
                   borderRadius: '20px',
                   padding: '4px 9px',
-                  color: '#93c5fd',
+                  color: '#a5b4fc',
                   fontSize: '0.72rem',
                   fontWeight: 700,
                   cursor: 'pointer'
                 }}
               >
-                <Cloud size={12} color="#4285F4" />
-                <span>Google</span>
+                <HardDrive size={12} color="#818cf8" />
+                <span>Backup</span>
               </button>
             )}
 

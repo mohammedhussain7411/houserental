@@ -44,6 +44,7 @@ import {
   X,
   LogOut,
   Cloud,
+  HardDrive,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
@@ -407,11 +408,11 @@ export function App() {
           <button
             className="nav-link"
             onClick={() => setIsGoogleDriveBackupOpen(true)}
-            data-tooltip="Google Drive Backup"
-            title="Google Drive Backup"
+            data-tooltip="Backup & Restore (Local & Cloud)"
+            title="Backup & Restore (Local & Cloud)"
           >
-            <Cloud size={19} className="nav-icon" color="#4285F4" />
-            {!isIconOnlySidebar && <span>Google Drive Backup</span>}
+            <HardDrive size={19} className="nav-icon" color="#818cf8" />
+            {!isIconOnlySidebar && <span>Backup & Restore</span>}
           </button>
 
           <button
@@ -618,11 +619,11 @@ export function App() {
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => setIsGoogleDriveBackupOpen(true)}
-              title="Save or Restore Data in Google Drive"
+              title="Backup & Restore (Local Download & Google Drive)"
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <Cloud size={16} color="#4285F4" />
-              <span>Google Drive</span>
+              <HardDrive size={16} color="#818cf8" />
+              <span>Backup</span>
             </button>
 
             <button

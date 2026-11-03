@@ -17,7 +17,8 @@ import {
   ShieldCheck,
   Download,
   Trash2,
-  FolderSync
+  FolderSync,
+  HardDrive
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -109,13 +110,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
             className={`btn btn-ghost btn-sm ${activeTab === 'backup' ? 'active' : ''}`}
             style={{
               borderRadius: '0',
-              borderBottom: activeTab === 'backup' ? '2px solid #4285F4' : '2px solid transparent',
+              borderBottom: activeTab === 'backup' ? '2px solid #818cf8' : '2px solid transparent',
               color: activeTab === 'backup' ? '#fff' : 'var(--text-dim)',
               padding: '12px 16px'
             }}
             onClick={() => setActiveTab('backup')}
           >
-            <Cloud size={15} color={activeTab === 'backup' ? '#4285F4' : 'currentColor'} /> Google Drive Backup
+            <HardDrive size={15} color={activeTab === 'backup' ? '#818cf8' : 'currentColor'} /> Backup & Restore
           </button>
           <button
             className={`btn btn-ghost btn-sm ${activeTab === 'messaging' ? 'active' : ''}`}
@@ -325,6 +326,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onUpdate,
 
           {activeTab === 'backup' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Local Backup Card */}
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%)',
+                  border: '1px solid rgba(99, 102, 241, 0.35)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <HardDrive size={22} color="#818cf8" />
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '0.98rem', color: '#fff' }}>Local Device Backup & Restore</h4>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        Save a complete standalone .json backup file directly to this PC / phone downloads
+                      </p>
+                    </div>
+                  </div>
+                  <span className="badge badge-paid" style={{ fontSize: '0.7rem' }}>
+                    Offline Ready
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none' }}
+                    onClick={() => {
+                      const backup = rentEasyApi.getCompleteBackupData();
+                      const now = new Date();
+                      const dateStr = now.toISOString().split('T')[0];
+                      const timeStr = `${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
+                      const filename = `RentEasy_Backup_${dateStr}_${timeStr}.json`;
+                      rentEasyApi.downloadBlob(filename, JSON.stringify(backup, null, 2), 'application/json');
+                      setBackupMsg(`Local backup "${filename}" downloaded to device downloads!`);
+                    }}
+                  >
+                    <Download size={14} /> Download Local Backup (.json)
+                  </button>
+
+                  {onOpenGoogleDriveBackup && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        onClose();
+                        onOpenGoogleDriveBackup();
+                      }}
+                    >
+                      <Download size={14} /> Open Full Backup Hub
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Google Drive Card */}
               <div
                 style={{
                   padding: '16px',
