@@ -866,7 +866,7 @@ class RentEasyApiService {
     return { createdCount };
   }
 
-  // Recalculates live house balance for each tenant (eliminates duplicate counting)
+  // Recalculates live house balance for each tenant: Due = Previous Balance + Present Rent - Payments
   recalculateTenantBalances(): void {
     const tenants = loadOrInit('tenants', initialTenants);
     const rawCharges = loadOrInit('rent_charges', initialRentCharges);
@@ -887,20 +887,27 @@ class RentEasyApiService {
            c.unit_number && t.house_number && c.unit_number.trim().toLowerCase() === t.house_number.trim().toLowerCase())
       );
 
-      // Track distinct months to prevent any double counting
-      const seenMonths = new Set<string>();
-      let totalOutstanding = 0;
-      for (const c of tenantCharges) {
-        if (!seenMonths.has(c.period_month)) {
-          seenMonths.add(c.period_month);
-          totalOutstanding += Number(c.outstanding_balance || 0);
+      // Sort charges from newest billing month to oldest
+      const sorted = [...tenantCharges].sort((a, b) => (b.period_month || '').localeCompare(a.period_month || ''));
+
+      let newBal = 0;
+      if (sorted.length === 0) {
+        // No charges yet: Current Due = Previous Balance + Present Rent
+        newBal = (Number(t.initial_balance) || 0) + (Number(t.monthly_rent) || 0);
+      } else {
+        // The latest billing period charge already contains (Current Rent + carry-forward of Previous Balance - payments made).
+        // It accurately reflects the total live due without double-counting older months.
+        const latest = sorted[0];
+        if (Number(latest.other_charges || 0) > 0 || sorted.length === 1) {
+          newBal = Number(latest.outstanding_balance || 0);
+        } else {
+          // If latest charge has other_charges = 0 (e.g. standalone month), add Previous Balance + current month outstanding
+          const prevBal = Number(t.initial_balance || 0);
+          const currentOut = Number(latest.outstanding_balance || 0);
+          newBal = prevBal + currentOut;
         }
       }
 
-      // If tenant has charges, totalOutstanding represents their exact balance
-      // (the firstCharge already includes initial_balance in other_charges).
-      // If no charges exist yet, fall back to initial_balance + monthly_rent.
-      const newBal = tenantCharges.length > 0 ? totalOutstanding : ((Number(t.initial_balance) || 0) + (Number(t.monthly_rent) || 0));
       if (t.balance_amount !== newBal) {
         t.balance_amount = newBal;
         changed = true;
@@ -1795,34 +1802,23 @@ class RentEasyApiService {
         ((c.tenant_name && oldName && c.tenant_name.trim().toLowerCase() === oldName.trim().toLowerCase()) ||
          (c.tenant_name && tenant.name && c.tenant_name.trim().toLowerCase() === tenant.name.trim().toLowerCase())));
 
-    // If initial_balance changed, update the charge holding previous balance
+    // If initial_balance changed, update the active charge holding previous balance
     if (initialBalChanged && initialBalDiff !== 0) {
       const tenantChargesList = charges.filter(c => isTenantCharge(c));
+      const currentMonth = new Date().toISOString().substring(0, 7);
 
-      // Candidate 1: Charge that currently has other_charges matching oldInitialBal (if oldInitialBal > 0)
-      let chargeToAdjust = tenantChargesList.find(c => Number(c.other_charges || 0) === oldInitialBal && oldInitialBal > 0);
+      // Candidate 1: Current month charge
+      let chargeToAdjust = tenantChargesList.find(c => c.period_month === currentMonth);
 
-      // Candidate 2: Any charge that currently has other_charges > 0
-      if (!chargeToAdjust) {
-        chargeToAdjust = tenantChargesList.find(c => Number(c.other_charges || 0) > 0);
-      }
-
-      // Candidate 3: Earliest pending or unpaid charge
-      if (!chargeToAdjust) {
-        chargeToAdjust = tenantChargesList.find(c => c.status !== 'paid');
-      }
-
-      // Candidate 4: Earliest charge by period_month
+      // Candidate 2: Latest charge by period_month
       if (!chargeToAdjust && tenantChargesList.length > 0) {
-        chargeToAdjust = [...tenantChargesList].sort((a, b) => (a.period_month || '').localeCompare(b.period_month || ''))[0];
+        chargeToAdjust = [...tenantChargesList].sort((a, b) => (b.period_month || '').localeCompare(a.period_month || ''))[0];
       }
 
       if (chargeToAdjust) {
-        const curOther = Number(chargeToAdjust.other_charges || 0);
-        const updatedOther = Math.max(0, curOther + initialBalDiff);
-        chargeToAdjust.other_charges = updatedOther;
+        chargeToAdjust.other_charges = newInitialBal;
         const curRent = rentChanged ? newRent : Number(chargeToAdjust.rent_amount || 0);
-        chargeToAdjust.total_due = curRent + updatedOther;
+        chargeToAdjust.total_due = curRent + newInitialBal;
         const paidSoFar = Number(chargeToAdjust.amount_paid || 0);
         chargeToAdjust.outstanding_balance = Math.max(0, chargeToAdjust.total_due - paidSoFar);
 

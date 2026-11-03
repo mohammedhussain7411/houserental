@@ -443,7 +443,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Calendar size={14} color="var(--primary)" /> Move-in / Agreement Date *
+                  <Calendar size={14} color="var(--primary)" /> Move-in / Joining Date *
                 </label>
                 <input
                   type="date"
@@ -452,6 +452,9 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
                   onChange={e => setDate(e.target.value)}
                   required
                 />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                  Used for agreement & 11-month rent increase. Past rent is NOT charged.
+                </span>
               </div>
 
               <div className="form-group">
@@ -518,7 +521,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
               </div>
             </div>
 
-            {/* 5. Aadhaar Number & Initial Balance */}
+            {/* 5. Aadhaar Number & Previous Balance */}
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -536,8 +539,7 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
 
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <IndianRupee size={14} color="#38bdf8" />
-                  {isEditing ? 'Previous / Starting Balance (₹)' : 'Existing Balance (₹, if any)'}
+                  <IndianRupee size={14} color="#38bdf8" /> Previous / Arrears Balance (₹)
                 </label>
                 <input
                   type="number"
@@ -547,15 +549,38 @@ export const AddTenantModal: React.FC<AddTenantModalProps> = ({
                   value={initialBalance}
                   onChange={e => setInitialBalance(e.target.value)}
                 />
-                {isEditing && tenantToEdit && (
-                  <span style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '4px', display: 'block', lineHeight: 1.4 }}>
-                    💡 Updating previous balance will immediately recalculate this tenant's dues from ₹{tenantToEdit.balance_amount.toLocaleString('en-IN')} to{' '}
-                    <strong style={{ color: '#fbbf24' }}>
-                      ₹{((parseFloat(monthlyRent) || 0) + (parseFloat(initialBalance) || 0)).toLocaleString('en-IN')}
-                    </strong>{' '}
-                    total dues.
-                  </span>
-                )}
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                  Past unpaid balance (if any). Added directly to present rent.
+                </span>
+              </div>
+            </div>
+
+            {/* Live Calculation: Due = Previous Balance + Present Rent */}
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: '10px',
+              background: 'rgba(56, 189, 248, 0.08)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              marginBottom: '16px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#38bdf8', fontWeight: 700, letterSpacing: '0.05em' }}>
+                  Calculated Current Due
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  ₹{(parseFloat(initialBalance) || 0).toLocaleString('en-IN')} (Previous Balance) + ₹{(parseFloat(monthlyRent) || 0).toLocaleString('en-IN')} (Present Rent)
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  ₹{((parseFloat(initialBalance) || 0) + (parseFloat(monthlyRent) || 0)).toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                  Live Balance Due
+                </div>
               </div>
             </div>
 
