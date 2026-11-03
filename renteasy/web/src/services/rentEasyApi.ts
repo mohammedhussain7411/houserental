@@ -2407,6 +2407,7 @@ WITNESSES:
       id: `rec-${Date.now()}`,
       payment_id: newPayment.id,
       receipt_number: receiptNumber,
+      payment_date: data.payment_date,
       issued_at: new Date().toISOString(),
       tenant_name: charge.tenant_name,
       property_name: charge.property_name,
@@ -2555,7 +2556,9 @@ WITNESSES:
     let receipt: Receipt;
     if (receiptIndex !== -1) {
       receipt = receipts[receiptIndex];
-      if (data.payment_date) receipt.issued_at = `${data.payment_date}T12:00:00.000Z`;
+      if (data.payment_date) {
+        receipt.payment_date = data.payment_date;
+      }
       if (data.method) receipt.payment_method = data.method;
       if (data.reference) receipt.reference = data.reference;
       receipt.amount_paid = newAmount;
@@ -2567,6 +2570,7 @@ WITNESSES:
         id: `rec-${Date.now()}`,
         payment_id: payment.id,
         receipt_number: payment.receipt_number || `REC-${Date.now()}`,
+        payment_date: payment.payment_date,
         issued_at: new Date().toISOString(),
         tenant_name: 'Tenant',
         property_name: 'Property',
@@ -2671,7 +2675,7 @@ WITNESSES:
     // Update receipt fields
     receipt.amount_paid = newAmount;
     if (data.payment_date) {
-      receipt.issued_at = data.payment_date.includes('T') ? data.payment_date : `${data.payment_date}T12:00:00.000Z`;
+      receipt.payment_date = data.payment_date;
     }
     if (data.payment_method) receipt.payment_method = data.payment_method;
     if (data.reference) receipt.reference = data.reference;
@@ -2757,7 +2761,16 @@ WITNESSES:
   }
 
   getReceipts(): Receipt[] {
-    return loadOrInit('receipts', initialReceipts);
+    const receipts = loadOrInit<Receipt[]>('receipts', initialReceipts);
+    const payments = loadOrInit<Payment[]>('payments', initialPayments);
+    return receipts.map(r => {
+      if (r.payment_date) return r;
+      const linked = payments.find(p => p.id === r.payment_id || (p.receipt_number && p.receipt_number === r.receipt_number));
+      return {
+        ...r,
+        payment_date: linked?.payment_date || (r.issued_at ? r.issued_at.split('T')[0] : new Date().toISOString().split('T')[0])
+      };
+    });
   }
 
   getPayments(): Payment[] {
@@ -3569,6 +3582,7 @@ WITNESSES:
         id: r.id || `rec-${Date.now()}-${idx}`,
         payment_id: r.payment_id || `pay-${Date.now()}-${idx}`,
         receipt_number: r.receipt_number || `REC-${idx}`,
+        payment_date: r.payment_date || (r.issued_at ? r.issued_at.split('T')[0] : new Date().toISOString().split('T')[0]),
         issued_at: r.issued_at || new Date().toISOString(),
         tenant_name: r.tenant_name || 'Tenant',
         property_name: r.property_name || 'Property',

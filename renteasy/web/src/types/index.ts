@@ -149,6 +149,7 @@ export interface Receipt {
   payment_id: string;
   receipt_number: string;
   issued_at: string;
+  payment_date?: string;
   tenant_name: string;
   property_name: string;
   unit_number: string;

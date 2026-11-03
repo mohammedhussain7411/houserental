@@ -583,7 +583,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 <th>Property</th>
                 <th>Amount Paid</th>
                 <th>Channel / Ref</th>
-                <th>Issued At</th>
+                <th>Payment Date</th>
                 <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -603,8 +603,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       {r.payment_method.toUpperCase()}
                     </span>
                   </td>
-                  <td style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>
-                    {new Date(r.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                  <td style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600 }}>
+                    {(() => {
+                      const dStr = r.payment_date || r.issued_at;
+                      if (!dStr) return '';
+                      const clean = dStr.includes('T') ? dStr.split('T')[0] : dStr;
+                      const parts = clean.split('-');
+                      if (parts.length === 3) {
+                        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                      }
+                      return new Date(dStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+                    })()}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: '6px' }}>

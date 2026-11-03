@@ -26,17 +26,41 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, on
 
   const landlord = rentEasyApi.getLandlord();
   const tenants = rentEasyApi.getTenants();
+  const payments = rentEasyApi.getPayments();
   const linkedTenant = tenants.find(t => t.name === receipt.tenant_name);
   const securityDeposit = linkedTenant ? linkedTenant.deposit_amount : 0;
   const houseNumber = linkedTenant ? linkedTenant.house_number : receipt.unit_number;
+
+  // Resolve Payment Date (actual date tenant paid)
+  const linkedPayment = payments.find(p => p.id === receipt.payment_id || (p.receipt_number && p.receipt_number === receipt.receipt_number));
+  const rawPaymentDate = receipt.payment_date || linkedPayment?.payment_date || (receipt.issued_at ? receipt.issued_at.split('T')[0] : '');
+
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+      const parts = cleanDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleWhatsAppShare = () => {
+    const paymentDateFormatted = formatDisplayDate(rawPaymentDate);
     const text = encodeURIComponent(
-      `Hello ${receipt.tenant_name},\nYour rent payment of ₹${receipt.amount_paid.toLocaleString('en-IN')} has been received and deducted for House ${houseNumber}.\nRemaining House Balance: ₹${receipt.outstanding_balance.toLocaleString('en-IN')}.\nSecurity Deposit Held: ₹${securityDeposit.toLocaleString('en-IN')}.\nReceipt: ${receipt.receipt_number}\nVerification Hash: ${receipt.verification_hash}\nThank you, ${landlord.name}`
+      `Hello ${receipt.tenant_name},\nYour rent payment of ₹${receipt.amount_paid.toLocaleString('en-IN')} has been received on ${paymentDateFormatted} and deducted for House ${houseNumber}.\nRemaining House Balance: ₹${receipt.outstanding_balance.toLocaleString('en-IN')}.\nSecurity Deposit Held: ₹${securityDeposit.toLocaleString('en-IN')}.\nReceipt: ${receipt.receipt_number}\nPayment Received Date: ${paymentDateFormatted}\nVerification Hash: ${receipt.verification_hash}\nThank you, ${landlord.name}`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
@@ -125,14 +149,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, on
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 700, color: '#ffffff' }}>
                   {receipt.receipt_number}
                 </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
-                  {new Date(receipt.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                <div style={{ fontSize: '0.825rem', color: '#38bdf8', fontWeight: 700, marginTop: '3px' }}>
+                  Paid on: {formatDisplayDate(rawPaymentDate)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                  Issued: {formatDisplayDate(receipt.issued_at)}
                 </div>
               </div>
             </div>
 
             {/* Receipt Details Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', marginBottom: '22px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1.1fr', gap: '16px', marginBottom: '22px' }}>
               <div>
                 <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>Received From (Tenant)</div>
                 <div style={{ fontSize: '1.05rem', fontWeight: 700, marginTop: '2px' }}>{receipt.tenant_name}</div>
@@ -141,15 +168,18 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose, on
               </div>
 
               <div>
-                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>Security Deposit Held</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#34d399', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                  ₹{securityDeposit.toLocaleString('en-IN')}
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>Payment Received Date</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#38bdf8', fontFamily: 'var(--font-mono)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Calendar size={15} /> {formatDisplayDate(rawPaymentDate)}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                   Rental Month: <strong style={{ color: '#fff' }}>{receipt.period_month}</strong>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)' }}>
                   Via {receipt.payment_method.toUpperCase()} ({receipt.reference})
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#34d399', marginTop: '3px' }}>
+                  Deposit Held: <strong>₹{securityDeposit.toLocaleString('en-IN')}</strong>
                 </div>
               </div>
             </div>

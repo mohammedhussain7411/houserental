@@ -41,16 +41,35 @@ export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onView
     r.property_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+      const parts = cleanDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const handleExportCSV = () => {
     if (receipts.length === 0) {
       alert('No receipts to export.');
       return;
     }
 
-    const headers = ['Receipt Number', 'Issued Date', 'Tenant Name', 'Property', 'Unit', 'Period', 'Amount Paid', 'Payment Method', 'Reference', 'Remaining Balance', 'Hash'];
+    const headers = ['Receipt Number', 'Payment Date', 'Issued Date', 'Tenant Name', 'Property', 'Unit', 'Period', 'Amount Paid', 'Payment Method', 'Reference', 'Remaining Balance', 'Hash'];
     const rows = receipts.map(r => [
       r.receipt_number,
-      new Date(r.issued_at).toLocaleDateString('en-IN'),
+      formatDate(r.payment_date || r.issued_at),
+      formatDate(r.issued_at),
       `"${r.tenant_name}"`,
       `"${r.property_name}"`,
       `"${r.unit_number}"`,
@@ -159,7 +178,7 @@ export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onView
                 <th>Period</th>
                 <th>Amount Paid</th>
                 <th>Method / Ref</th>
-                <th>Issued Date</th>
+                <th>Payment Date</th>
                 <th>Verification Hash</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -182,8 +201,15 @@ export const ReceiptsReportsPage: React.FC<ReceiptsReportsPageProps> = ({ onView
                     </span>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '2px' }}>{r.reference}</div>
                   </td>
-                  <td style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-                    {new Date(r.issued_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  <td>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#38bdf8' }}>
+                      {formatDate(r.payment_date || r.issued_at)}
+                    </div>
+                    {r.issued_at && (
+                      <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                        Issued: {formatDate(r.issued_at)}
+                      </div>
+                    )}
                   </td>
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
                     {r.verification_hash}

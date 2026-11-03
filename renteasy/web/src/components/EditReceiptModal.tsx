@@ -36,9 +36,9 @@ export const EditReceiptModal: React.FC<EditReceiptModalProps> = ({
   if (!isOpen || !receipt) return null;
 
   // Extract initial date in YYYY-MM-DD
-  const initialDateStr = receipt.issued_at
+  const initialDateStr = receipt.payment_date || (receipt.issued_at
     ? receipt.issued_at.split('T')[0]
-    : new Date().toISOString().split('T')[0];
+    : new Date().toISOString().split('T')[0]);
 
   const [receiptNumber, setReceiptNumber] = useState<string>(receipt.receipt_number || '');
   const [amount, setAmount] = useState<string>(String(receipt.amount_paid || ''));
@@ -56,7 +56,7 @@ export const EditReceiptModal: React.FC<EditReceiptModalProps> = ({
     if (receipt) {
       setReceiptNumber(receipt.receipt_number || '');
       setAmount(String(receipt.amount_paid || ''));
-      setPaymentDate(receipt.issued_at ? receipt.issued_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      setPaymentDate(receipt.payment_date || (receipt.issued_at ? receipt.issued_at.split('T')[0] : new Date().toISOString().split('T')[0]));
       setMethod(receipt.payment_method || 'upi');
       setReference(receipt.reference || '');
       setPeriodMonth(receipt.period_month || '');

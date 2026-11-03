@@ -439,3 +439,4 @@ export const RentIncreaseModal: React.FC<RentIncreaseModalProps> = ({
     </div>
   );
 };
+
