@@ -13,7 +13,9 @@ import {
   Smartphone,
   RefreshCw,
   Cloud,
-  Settings
+  Settings,
+  Users,
+  Monitor
 } from 'lucide-react';
 
 interface MobileFrameProps {
@@ -23,6 +25,7 @@ interface MobileFrameProps {
   onOpenLiveSync?: () => void;
   onOpenGoogleDriveBackup?: () => void;
   onOpenSettings?: () => void;
+  onSwitchToLaptop?: () => void;
   syncStatus?: DeviceSyncStatus;
   children: React.ReactNode;
 }
@@ -34,6 +37,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
   onOpenLiveSync,
   onOpenGoogleDriveBackup,
   onOpenSettings,
+  onSwitchToLaptop,
   syncStatus,
   children
 }) => {
@@ -68,6 +72,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
 
         {/* Status Bar */}
         <div
+          className="fake-status-bar"
           style={{
             position: 'absolute',
             top: '10px',
@@ -134,6 +139,30 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Laptop / Desktop Interface Button */}
+            {onSwitchToLaptop && (
+              <button
+                onClick={onSwitchToLaptop}
+                title="Switch to Full Laptop / Desktop Interface (if some parts are not visible)"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(99, 102, 241, 0.25)',
+                  border: '1px solid rgba(99, 102, 241, 0.6)',
+                  borderRadius: '20px',
+                  padding: '4px 10px',
+                  color: '#c7d2fe',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                <Monitor size={12} />
+                <span>Laptop View</span>
+              </button>
+            )}
+
             {/* Sync Now button */}
             <button
               onClick={onOpenLiveSync}
@@ -213,7 +242,7 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           {children}
         </div>
 
-        {/* Native Mobile Bottom Navigation Bar */}
+        {/* Native Mobile Bottom Navigation Bar (Horizontally scrollable) */}
         <div className="phone-bottom-nav">
           <button
             className={`phone-nav-item ${currentPage === 'dashboard' ? 'active' : ''}`}
@@ -232,11 +261,43 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
           </button>
 
           <button
+            className={`phone-nav-item ${currentPage === 'tenants' ? 'active' : ''}`}
+            onClick={() => onNavigate('tenants')}
+          >
+            <Users size={17} />
+            <span>Tenants</span>
+          </button>
+
+          <button
             className={`phone-nav-item ${currentPage === 'ledger' ? 'active' : ''}`}
             onClick={() => onNavigate('ledger')}
           >
             <FileSpreadsheet size={17} />
             <span>Ledger</span>
+          </button>
+
+          <button
+            className={`phone-nav-item ${currentPage === 'reminders' ? 'active' : ''}`}
+            onClick={() => onNavigate('reminders')}
+          >
+            <BellRing size={17} />
+            <span>Reminders</span>
+          </button>
+
+          <button
+            className={`phone-nav-item ${currentPage === 'calendar' ? 'active' : ''}`}
+            onClick={() => onNavigate('calendar')}
+          >
+            <CalendarDays size={17} />
+            <span>Calendar</span>
+          </button>
+
+          <button
+            className={`phone-nav-item ${currentPage === 'receipts' ? 'active' : ''}`}
+            onClick={() => onNavigate('receipts')}
+          >
+            <ReceiptIcon size={17} />
+            <span>Receipts</span>
           </button>
 
           <button
@@ -253,22 +314,17 @@ export const MobileFrame: React.FC<MobileFrameProps> = ({
             <span>Sync</span>
           </button>
 
-          <button
-            className="phone-nav-item"
-            onClick={onOpenGoogleDriveBackup}
-            style={{ color: '#60a5fa' }}
-          >
-            <Cloud size={17} color="#4285F4" />
-            <span>Drive</span>
-          </button>
-
-          <button
-            className={`phone-nav-item ${currentPage === 'receipts' ? 'active' : ''}`}
-            onClick={() => onNavigate('receipts')}
-          >
-            <ReceiptIcon size={17} />
-            <span>Receipts</span>
-          </button>
+          {onSwitchToLaptop && (
+            <button
+              className="phone-nav-item"
+              onClick={onSwitchToLaptop}
+              style={{ color: '#a5b4fc' }}
+              title="Switch to Laptop View"
+            >
+              <Monitor size={17} />
+              <span>Laptop</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

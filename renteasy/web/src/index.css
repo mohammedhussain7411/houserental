@@ -925,6 +925,7 @@ button {
     grid-template-columns: 1fr !important;
   }
 
+  /* In real mobile screens, remove fake phone frame decor so 100% of the screen is usable */
   .phone-mockup {
     width: 100% !important;
     max-width: 100% !important;
@@ -934,9 +935,115 @@ button {
     box-shadow: none !important;
   }
 
+  .phone-notch,
+  .fake-status-bar {
+    display: none !important;
+  }
+
+  .phone-screen {
+    padding-top: 54px !important;
+  }
+
   .mobile-view-wrapper {
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
   }
+
+  /* Make bottom navigation scrollable with smooth touch so all pages are reachable */
+  .phone-bottom-nav {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    justify-content: flex-start !important;
+    gap: 8px !important;
+    padding: 0 10px 8px 10px !important;
+  }
+
+  .phone-bottom-nav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .phone-nav-item {
+    flex-shrink: 0 !important;
+    min-width: 58px !important;
+  }
+}
+
+/* Forced Laptop / Desktop Mode on Mobile devices */
+html.forced-laptop-mode,
+html.forced-laptop-mode body {
+  width: 1200px !important;
+  min-width: 1200px !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+html.forced-laptop-mode .app-container {
+  width: 1200px !important;
+  min-width: 1200px !important;
+  display: flex !important;
+  overflow-x: auto !important;
+}
+
+html.forced-laptop-mode .sidebar {
+  display: flex !important;
+  position: sticky !important;
+  top: 0 !important;
+  height: 100vh !important;
+  width: 260px !important;
+  min-width: 260px !important;
+}
+
+html.forced-laptop-mode .sidebar.icon-only {
+  width: 72px !important;
+  min-width: 72px !important;
+}
+
+html.forced-laptop-mode .top-bar {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  height: 72px !important;
+  padding: 0 32px !important;
+  min-width: 940px !important;
+}
+
+html.forced-laptop-mode .main-content {
+  min-width: 940px !important;
+  overflow-x: auto !important;
+}
+
+html.forced-laptop-mode .metrics-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+
+html.forced-laptop-mode .phone-mockup,
+html.forced-laptop-mode .mobile-view-wrapper {
+  display: none !important;
+}
+
+/* Floating switch-back pill when Laptop Mode is active on mobile */
+.floating-mode-switcher {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 9999;
+  background: #0f172a;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(99, 102, 241, 0.3);
+  border-radius: 30px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.floating-mode-switcher:hover {
+  background: #1e293b;
+  border-color: rgba(99, 102, 241, 0.8);
 }

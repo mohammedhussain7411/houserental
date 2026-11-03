@@ -60,10 +60,52 @@ export function App() {
 
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_device_mode') : null;
+    if (saved === 'desktop') return false;
+    if (saved === 'mobile') return true;
     return typeof window !== 'undefined' && window.innerWidth <= 768;
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isIconOnlySidebar, setIsIconOnlySidebar] = useState<boolean>(false);
+
+  const handleSetDeviceMode = (mobile: boolean) => {
+    setIsMobileMode(mobile);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('renteasy_device_mode', mobile ? 'mobile' : 'desktop');
+    }
+    if (typeof document !== 'undefined') {
+      const meta = document.getElementById('viewport-meta') as HTMLMetaElement | null;
+      if (mobile) {
+        document.documentElement.classList.remove('forced-laptop-mode');
+        if (meta) {
+          meta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+        }
+      } else {
+        document.documentElement.classList.add('forced-laptop-mode');
+        if (meta) {
+          const isPhone = window.innerWidth <= 768;
+          if (isPhone) {
+            meta.setAttribute('content', 'width=1200, initial-scale=0.33, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+          } else {
+            meta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+          }
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isMobileMode && typeof document !== 'undefined') {
+      const isPhone = window.innerWidth <= 768;
+      if (isPhone) {
+        document.documentElement.classList.add('forced-laptop-mode');
+        const meta = document.getElementById('viewport-meta') as HTMLMetaElement | null;
+        if (meta) {
+          meta.setAttribute('content', 'width=1200, initial-scale=0.33, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+        }
+      }
+    }
+  }, [isMobileMode]);
 
   // Modals state
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState<boolean>(false);
@@ -478,16 +520,18 @@ export function App() {
               <button
                 className={`btn btn-sm ${!isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                onClick={() => setIsMobileMode(false)}
+                onClick={() => handleSetDeviceMode(false)}
+                title="Full Laptop / Desktop Dashboard"
               >
-                <Monitor size={14} /> Desktop Dashboard
+                <Monitor size={14} /> 💻 Laptop View
               </button>
               <button
                 className={`btn btn-sm ${isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
                 style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                onClick={() => setIsMobileMode(true)}
+                onClick={() => handleSetDeviceMode(true)}
+                title="Mobile Phone Optimized View"
               >
-                <Smartphone size={14} /> Mobile App Preview
+                <Smartphone size={14} /> 📱 Mobile View
               </button>
             </div>
           </div>
@@ -586,6 +630,7 @@ export function App() {
             onOpenLiveSync={() => setIsLiveSyncModalOpen(true)}
             onOpenGoogleDriveBackup={() => setIsGoogleDriveBackupOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
+            onSwitchToLaptop={() => handleSetDeviceMode(false)}
             syncStatus={syncStatus}
           >
             {renderCurrentPage()}
@@ -594,6 +639,18 @@ export function App() {
           renderCurrentPage()
         )}
       </main>
+
+      {/* Floating mode switcher when Laptop View is active on mobile */}
+      {!isMobileMode && (
+        <button
+          className="floating-mode-switcher"
+          onClick={() => handleSetDeviceMode(true)}
+          title="Switch back to Mobile Interface"
+        >
+          <Smartphone size={15} color="#34d399" />
+          <span>💻 Laptop Mode Active • <strong style={{ color: '#38bdf8' }}>Switch to Mobile</strong></span>
+        </button>
+      )}
 
       {/* Global Modals */}
       {isRecordPaymentOpen && (
