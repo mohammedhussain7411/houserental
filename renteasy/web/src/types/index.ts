@@ -340,3 +340,15 @@ export interface GoogleDriveCloudBackup {
   data: RentEasyBackupPayload;
 }
 
+export interface ElevenMonthMilestone {
+  tenant: Tenant;
+  moveInDate: string;
+  milestoneDate: string;
+  daysRemaining: number;
+  monthsPassed: number;
+  status: 'overdue' | 'due_soon' | 'upcoming';
+  currentRent: number;
+  suggestedRent5Pct: number;
+  suggestedRent10Pct: number;
+}
+

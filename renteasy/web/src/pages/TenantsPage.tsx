@@ -4,6 +4,7 @@ import { rentEasyApi } from '../services/rentEasyApi';
 import { AddTenantModal } from '../components/AddTenantModal';
 import { EditHouseNumberModal, EditHouseNumberTarget } from '../components/EditHouseNumberModal';
 import { RentalAgreementModal } from '../components/RentalAgreementModal';
+import { RentIncreaseModal } from '../components/RentIncreaseModal';
 import {
   Users,
   UserPlus,
@@ -26,7 +27,9 @@ import {
   Pencil,
   ArrowUp,
   ArrowDown,
-  ArrowUpDown
+  ArrowUpDown,
+  TrendingUp,
+  Clock
 } from 'lucide-react';
 
 interface TenantsPageProps {
@@ -47,6 +50,7 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [editingHouseTarget, setEditingHouseTarget] = useState<EditHouseNumberTarget | null>(null);
   const [selectedTenantForAgreement, setSelectedTenantForAgreement] = useState<Tenant | null>(null);
+  const [selectedTenantForRentIncrease, setSelectedTenantForRentIncrease] = useState<Tenant | null>(null);
   const charges = rentEasyApi.getRentCharges();
 
   // Real-time synchronization listener for Phone <-> Web updates
@@ -389,12 +393,65 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
                       </div>
                     </td>
 
-                    {/* Move-in / Agreement Date */}
+                    {/* Move-in / Agreement Date & 11-Month Milestone */}
                     <td>
                       <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t.date}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-                        Auto-bills on <strong style={{ color: 'var(--primary)' }}>{t.due_day}th</strong>
-                      </div>
+                      {(() => {
+                        const mCalc = rentEasyApi.calculate11MonthMilestone(t.date);
+                        if (mCalc.status === 'overdue') {
+                          return (
+                            <div
+                              onClick={() => setSelectedTenantForRentIncrease(t)}
+                              style={{
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                marginTop: '4px',
+                                background: 'rgba(244, 63, 94, 0.18)',
+                                color: '#fb7185',
+                                border: '1px solid rgba(244, 63, 94, 0.4)',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 700
+                              }}
+                              title="11 months completed! Click to increase rent"
+                            >
+                              <TrendingUp size={10} /> 11m Due (+Rent)
+                            </div>
+                          );
+                        }
+                        if (mCalc.status === 'due_soon') {
+                          return (
+                            <div
+                              onClick={() => setSelectedTenantForRentIncrease(t)}
+                              style={{
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                marginTop: '4px',
+                                background: 'rgba(245, 158, 11, 0.18)',
+                                color: '#fbbf24',
+                                border: '1px solid rgba(245, 158, 11, 0.4)',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.68rem',
+                                fontWeight: 700
+                              }}
+                              title={`11-month renewal due in ${mCalc.daysRemaining} days`}
+                            >
+                              <Clock size={10} /> 11m in {mCalc.daysRemaining}d
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+                            Auto-bills on <strong style={{ color: 'var(--primary)' }}>{t.due_day}th</strong>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Monthly Rent */}
@@ -460,6 +517,23 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
 
                     {/* Collect Payment, Edit Tenant & Receipt Trigger */}
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          color: '#34d399',
+                          borderColor: 'rgba(16, 185, 129, 0.4)',
+                          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontWeight: 700,
+                          marginRight: '6px'
+                        }}
+                        onClick={() => setSelectedTenantForRentIncrease(t)}
+                        title={`Increase monthly rent & 11-month renewal for ${t.name}`}
+                      >
+                        <TrendingUp size={13} /> +Rent
+                      </button>
                       <button
                         className="btn btn-secondary btn-sm"
                         style={{
@@ -571,6 +645,18 @@ export const TenantsPage: React.FC<TenantsPageProps> = ({
           setTenants(rentEasyApi.getTenants());
         }}
       />
+
+      {/* 11-Month Rent Increase Modal */}
+      {selectedTenantForRentIncrease && (
+        <RentIncreaseModal
+          tenant={selectedTenantForRentIncrease}
+          onClose={() => setSelectedTenantForRentIncrease(null)}
+          onSuccess={() => {
+            setSelectedTenantForRentIncrease(null);
+            setTenants(rentEasyApi.getTenants());
+          }}
+        />
+      )}
 
       {/* Rental Agreement Modal */}
       {selectedTenantForAgreement && (

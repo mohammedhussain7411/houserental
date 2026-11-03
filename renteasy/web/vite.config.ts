@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), ...(isGHPages ? [] : [renteasySyncPlugin()])],
   server: {
     host: true,
-    port: 5174,
+    port: 5180,
     open: false
   }
 });

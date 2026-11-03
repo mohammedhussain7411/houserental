@@ -23,7 +23,8 @@ import {
   PropertyOwner,
   RentalAgreement,
   HouseType,
-  PaintingOption
+  PaintingOption,
+  ElevenMonthMilestone
 } from '../types';
 
 export function numberToIndianWords(num: number): string {
@@ -453,7 +454,7 @@ function getSyncEndpoint(path = ''): string {
   if (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.startsWith('file:')) {
     return `${window.location.origin}/api/sync${path}`;
   }
-  return `http://localhost:5174/api/sync${path}`;
+  return `http://localhost:5180/api/sync${path}`;
 }
 
 let _isApplyingRemoteSync = false;
@@ -1912,6 +1913,149 @@ class RentEasyApiService {
       save('tenants', tenants);
     }
     return t!;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 11-MONTH RENT INCREASE & LEASE RENEWAL REMINDER ENGINE
+  // ---------------------------------------------------------------------------
+  calculate11MonthMilestone(moveInDateStr: string): {
+    milestoneDateStr: string;
+    daysRemaining: number;
+    monthsPassed: number;
+    status: 'overdue' | 'due_soon' | 'upcoming';
+  } {
+    if (!moveInDateStr) {
+      return {
+        milestoneDateStr: 'Not set',
+        daysRemaining: 9999,
+        monthsPassed: 0,
+        status: 'upcoming'
+      };
+    }
+
+    const parts = moveInDateStr.split('-');
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10) || 1;
+
+    if (isNaN(y) || isNaN(m)) {
+      return {
+        milestoneDateStr: moveInDateStr,
+        daysRemaining: 9999,
+        monthsPassed: 0,
+        status: 'upcoming'
+      };
+    }
+
+    // Standard 11 months from move-in date
+    const targetDate = new Date(y, (m - 1) + 11, d);
+    const targetY = targetDate.getFullYear();
+    const targetM = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const targetD = String(targetDate.getDate()).padStart(2, '0');
+    const milestoneDateStr = `${targetY}-${targetM}-${targetD}`;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetMidnight = new Date(targetDate);
+    targetMidnight.setHours(0, 0, 0, 0);
+
+    const diffTime = targetMidnight.getTime() - today.getTime();
+    const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    const moveInDateObj = new Date(y, m - 1, d);
+    const monthsPassed = Math.max(0, Math.floor((today.getTime() - moveInDateObj.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)));
+
+    let status: 'overdue' | 'due_soon' | 'upcoming' = 'upcoming';
+    if (daysRemaining <= 0) {
+      status = 'overdue';
+    } else if (daysRemaining <= 30) {
+      status = 'due_soon';
+    }
+
+    return {
+      milestoneDateStr,
+      daysRemaining,
+      monthsPassed,
+      status
+    };
+  }
+
+  getElevenMonthMilestones(): ElevenMonthMilestone[] {
+    const tenants = this.getTenants().filter(t => t.status === 'active');
+    const list: ElevenMonthMilestone[] = tenants.map(t => {
+      const moveInDate = t.date || (t.created_at ? t.created_at.split('T')[0] : '2026-01-01');
+      const calc = this.calculate11MonthMilestone(moveInDate);
+      const rent = Number(t.monthly_rent || 0);
+
+      // Round increment amounts to nearest 50 for clean Indian currency amounts
+      const rent5Pct = Math.round((rent * 1.05) / 50) * 50;
+      const rent10Pct = Math.round((rent * 1.10) / 50) * 50;
+
+      return {
+        tenant: t,
+        moveInDate,
+        milestoneDate: calc.milestoneDateStr,
+        daysRemaining: calc.daysRemaining,
+        monthsPassed: calc.monthsPassed,
+        status: calc.status,
+        currentRent: rent,
+        suggestedRent5Pct: rent5Pct,
+        suggestedRent10Pct: rent10Pct
+      };
+    });
+
+    // Sort: Overdue (most overdue first) -> Due Soon -> Upcoming
+    return list.sort((a, b) => a.daysRemaining - b.daysRemaining);
+  }
+
+  increaseTenantRent(
+    tenantId: string,
+    newMonthlyRent: number,
+    resetMoveInDate = false,
+    newMoveInDate?: string
+  ): Tenant {
+    const tenants = loadOrInit('tenants', initialTenants);
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (!tenant) throw new Error('Tenant not found');
+
+    const oldRent = tenant.monthly_rent;
+    tenant.monthly_rent = Number(newMonthlyRent);
+    if (resetMoveInDate) {
+      tenant.date = newMoveInDate || new Date().toISOString().split('T')[0];
+    }
+    save('tenants', tenants);
+
+    // Also update any matching property inventory unit default rent
+    const properties = this.getProperties();
+    properties.forEach(p => {
+      if (p.units) {
+        p.units.forEach(u => {
+          if (
+            (tenant.active_lease_id && u.current_lease_id === tenant.active_lease_id) ||
+            u.unit_number.toLowerCase() === tenant.house_number.toLowerCase() ||
+            (u.current_tenant_name && u.current_tenant_name === tenant.name)
+          ) {
+            u.default_rent = Number(newMonthlyRent);
+          }
+        });
+      }
+    });
+    save('properties', properties);
+
+    this.recalculateTenantBalances();
+
+    this.addAudit(
+      'tenant_rent_increased',
+      'tenant',
+      tenant.id,
+      `Increased monthly rent for ${tenant.name} (${tenant.house_number}) from ₹${oldRent.toLocaleString('en-IN')} to ₹${newMonthlyRent.toLocaleString('en-IN')}.${resetMoveInDate ? ` Reset 11-month cycle date to ${tenant.date}.` : ''}`
+    );
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'rent_increase' } }));
+    }
+
+    return tenant;
   }
 
   // ---------------------------------------------------------------------------

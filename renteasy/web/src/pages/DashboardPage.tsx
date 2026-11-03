@@ -258,6 +258,59 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         </div>
       </div>
 
+      {/* 11-Month Rent Increase Milestone Alert Banner */}
+      {(() => {
+        const milestones = rentEasyApi.getElevenMonthMilestones();
+        const overdueRentIncreases = milestones.filter(m => m.status === 'overdue' || m.status === 'due_soon');
+        if (overdueRentIncreases.length === 0) return null;
+
+        return (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+              background: 'linear-gradient(90deg, rgba(244, 63, 94, 0.15) 0%, rgba(245, 158, 11, 0.12) 100%)',
+              border: '1px solid rgba(244, 63, 94, 0.35)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '12px 18px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <TrendingUp size={20} color="#fb7185" />
+              <div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#fff' }}>
+                  {overdueRentIncreases.length} {overdueRentIncreases.length === 1 ? 'Tenant is' : 'Tenants are'} Due for 11-Month Rent Increase!
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#cbd5e1' }}>
+                  11-month lease milestone reached. Eligible for standard +5% to +10% annual rent escalation.
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-sm"
+              onClick={() => onNavigate('reminders')}
+              style={{
+                background: '#ef4444',
+                color: '#fff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '0.78rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>Review 11-Mo Increases</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
+        );
+      })()}
+
       {/* 4 Financial Key Metric Cards */}
       <div className="metrics-grid">
         {/* Expected */}

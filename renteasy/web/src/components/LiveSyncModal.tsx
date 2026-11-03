@@ -34,7 +34,7 @@ export const LiveSyncModal: React.FC<LiveSyncModalProps> = ({ isOpen, onClose })
   // Sync endpoint URL calculation
   const currentOrigin = typeof window !== 'undefined' && window.location && !window.location.origin.startsWith('file:')
     ? window.location.origin
-    : 'http://localhost:5174';
+    : 'http://localhost:5180';
   const phoneUrl = `${currentOrigin}/`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(phoneUrl)}`;
 
