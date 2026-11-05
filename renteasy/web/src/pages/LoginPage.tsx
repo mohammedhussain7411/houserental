@@ -14,14 +14,19 @@ import {
   Cloud,
   User,
   X,
-  Check
+  Check,
+  Phone,
+  Home,
+  UserPlus,
+  LogIn,
+  AlertCircle
 } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
 }
 
-const GoogleIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+const GoogleIcon: React.FC<{ size?: number }> = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
     <path
       fill="#4285F4"
@@ -43,38 +48,103 @@ const GoogleIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('admin@renteasy.app');
-  const [password, setPassword] = useState('admin123');
+  const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin');
+
+  // Sign In Form State
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Google Account Registration & Login Modal state
+  // Register Form State
+  const [regName, setRegName] = useState('');
+  const [regCompany, setRegCompany] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regErrorMsg, setRegErrorMsg] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  // Google Sign-In Modal / Flow State
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const existingGoogleSession = rentEasyApi.getGoogleDriveSession();
-  const hasExistingGoogleAccount = existingGoogleSession && existingGoogleSession.isConnected && existingGoogleSession.email;
+  const hasExistingGoogleAccount = Boolean(existingGoogleSession && existingGoogleSession.isConnected && existingGoogleSession.email);
 
-  const [googleEmail, setGoogleEmail] = useState(existingGoogleSession?.email || '');
-  const [googleName, setGoogleName] = useState(existingGoogleSession?.name || '');
-  const [googleAutoBackup, setGoogleAutoBackup] = useState(true);
+  const [googleEmailInput, setGoogleEmailInput] = useState(existingGoogleSession?.email || 'mohammedhussain7411@gmail.com');
+  const [googleNameInput, setGoogleNameInput] = useState(existingGoogleSession?.name || 'Mohammed Hussain');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  const handleQuickLogin = (demoEmail: string = 'admin@renteasy.app', demoPass: string = 'admin123') => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setErrorMsg('');
-    setIsLoading(true);
+  // 1. REAL GOOGLE OAUTH POPUP TRIGGER
+  const handleTriggerGoogleOAuth = () => {
+    const clientId = rentEasyApi.getGoogleClientId();
 
-    setTimeout(() => {
-      localStorage.setItem('renteasy_auth_token', 'true');
-      localStorage.setItem('renteasy_logged_in_email', demoEmail);
-      sessionStorage.removeItem('renteasy_explicit_logout');
-      onLoginSuccess();
-    }, 200);
+    // If client ID is configured and Google SDK is present, launch native Google popup
+    if (clientId && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+      try {
+        setIsGoogleLoading(true);
+        const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.access_token) {
+              try {
+                const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+                });
+                const profile = await userRes.json();
+                rentEasyApi.setGoogleDriveOAuthSession(
+                  tokenResponse.access_token,
+                  tokenResponse.expires_in || 3600,
+                  profile.email,
+                  profile.name,
+                  profile.picture
+                );
+                rentEasyApi.createUserWithGoogle(profile.email, profile.name);
+                onLoginSuccess();
+              } catch (err: any) {
+                alert(`Google sign in profile fetch failed: ${err.message}`);
+              } finally {
+                setIsGoogleLoading(false);
+              }
+            } else {
+              setIsGoogleLoading(false);
+            }
+          }
+        });
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+        return;
+      } catch (err: any) {
+        console.warn('OAuth tokenClient failed, showing direct Google sign in modal:', err);
+      }
+    }
+
+    // Default direct Google Sign In flow (no manual Google Client ID setup required)
+    setShowGoogleModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // 2. CONFIRM SIGN IN WITH GOOGLE
+  const handleConfirmGoogleSignIn = (targetEmail?: string, targetName?: string) => {
+    const finalEmail = (targetEmail || googleEmailInput).trim();
+    const finalName = (targetName || googleNameInput).trim();
+
+    if (!finalEmail || !finalEmail.includes('@')) {
+      alert('Please enter a valid Google Account email.');
+      return;
+    }
+
+    setIsGoogleLoading(true);
+    setTimeout(() => {
+      rentEasyApi.createUserWithGoogle(finalEmail, finalName);
+      setIsGoogleLoading(false);
+      setShowGoogleModal(false);
+      onLoginSuccess();
+    }, 300);
+  };
+
+  // 3. TRADITIONAL USERNAME/EMAIL SIGN IN
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setIsLoading(true);
@@ -91,41 +161,65 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         sessionStorage.removeItem('renteasy_explicit_logout');
         onLoginSuccess();
       } else {
-        setErrorMsg('Invalid login credentials. Please use the default credentials below or continue with Google.');
+        setErrorMsg('Invalid login credentials. Check username/password or sign in with Google below.');
         setIsLoading(false);
       }
     }, 300);
   };
 
-  // Google Sign In / Account Creation Handler
-  const handleGoogleSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!googleEmail || !googleEmail.includes('@')) {
-      alert('Please enter a valid Google Account email address.');
+  // 4. REGISTER NEW LANDLORD ACCOUNT
+  const handleRegisterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegErrorMsg('');
+
+    if (!regName.trim()) {
+      setRegErrorMsg('Please enter your full name.');
+      return;
+    }
+    if (!regEmail.trim() || !regEmail.includes('@')) {
+      setRegErrorMsg('Please enter a valid email address.');
+      return;
+    }
+    if (!regPhone.trim()) {
+      setRegErrorMsg('Please enter your phone number.');
       return;
     }
 
-    setIsGoogleLoading(true);
+    setIsRegistering(true);
     setTimeout(() => {
-      rentEasyApi.createUserWithGoogle(googleEmail, googleName || googleEmail.split('@')[0]);
-      if (!googleAutoBackup) {
-        rentEasyApi.updateGoogleDriveAutoBackup(false);
+      try {
+        const res = rentEasyApi.registerNewLandlord({
+          name: regName,
+          company_name: regCompany,
+          email: regEmail,
+          phone: regPhone,
+          password: regPassword || 'admin123'
+        });
+
+        if (res.success) {
+          onLoginSuccess();
+        } else {
+          setRegErrorMsg(res.message || 'Registration failed.');
+          setIsRegistering(false);
+        }
+      } catch (err: any) {
+        setRegErrorMsg(err.message || 'Could not register landlord.');
+        setIsRegistering(false);
       }
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
-      onLoginSuccess();
-    }, 350);
+    }, 400);
   };
 
-  const handleContinueWithExistingGoogle = () => {
-    if (!existingGoogleSession || !existingGoogleSession.email) return;
-    setIsGoogleLoading(true);
+  // 5. MOHAMMED HUSSAIN 1-TAP LOGIN
+  const handleMohammedHussainAutoLogin = () => {
+    setIsLoading(true);
     setTimeout(() => {
-      rentEasyApi.createUserWithGoogle(existingGoogleSession.email, existingGoogleSession.name);
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
+      rentEasyApi.restoreDefaultPortfolio();
+      localStorage.setItem('renteasy_auth_token', 'true');
+      localStorage.setItem('renteasy_logged_in_email', 'mohammedhussain7411@gmail.com');
+      localStorage.setItem('renteasy_user_name', 'Mohammed Hussain');
+      sessionStorage.removeItem('renteasy_explicit_logout');
       onLoginSuccess();
-    }, 300);
+    }, 250);
   };
 
   return (
@@ -146,16 +240,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <div
         style={{
           width: '100%',
-          maxWidth: '460px',
-          background: 'rgba(17, 24, 39, 0.85)',
+          maxWidth: '480px',
+          background: 'rgba(17, 24, 39, 0.9)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: '24px',
-          padding: '36px 32px',
+          padding: '32px 28px',
           boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(99, 102, 241, 0.15)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px'
+          gap: '18px'
         }}
       >
         {/* App Logo & Header */}
@@ -170,227 +264,435 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 8px 24px rgba(99, 102, 241, 0.35)',
-              marginBottom: '14px'
+              marginBottom: '12px'
             }}
           >
             <Building2 size={30} color="#ffffff" />
           </div>
 
-          <h1 style={{ fontSize: '1.65rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', margin: 0 }}>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#ffffff', margin: 0 }}>
             RentEasy Landlord OS
           </h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Property management with continuous Google Drive auto-backup
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Rental property management with Google Drive auto-backup & WhatsApp receipts
           </p>
         </div>
 
-        {/* 1. Google Account Action Button */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Tab Switcher: Sign In vs Register */}
+        <div
+          style={{
+            display: 'flex',
+            background: 'rgba(0, 0, 0, 0.35)',
+            padding: '4px',
+            borderRadius: '12px',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            gap: '4px'
+          }}
+        >
           <button
             type="button"
-            onClick={() => {
-              if (hasExistingGoogleAccount) {
-                handleContinueWithExistingGoogle();
-              } else {
-                setShowGoogleModal(true);
-              }
-            }}
-            disabled={isGoogleLoading}
+            className="btn btn-sm"
+            onClick={() => { setActiveTab('signin'); setErrorMsg(''); }}
             style={{
-              background: '#ffffff',
-              color: '#1f2937',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '13px 18px',
-              fontSize: '0.92rem',
+              flex: 1,
+              borderRadius: '9px',
+              padding: '9px',
               fontWeight: 700,
+              fontSize: '0.88rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
-              transition: 'all 0.15s ease'
+              gap: '6px',
+              background: activeTab === 'signin' ? '#6366f1' : 'transparent',
+              color: activeTab === 'signin' ? '#ffffff' : 'var(--text-dim)',
+              border: 'none',
+              boxShadow: activeTab === 'signin' ? '0 2px 8px rgba(99, 102, 241, 0.4)' : 'none'
             }}
           >
-            <GoogleIcon size={20} />
-            <span>
-              {hasExistingGoogleAccount
-                ? `Continue as ${existingGoogleSession.name || existingGoogleSession.email}`
-                : 'Sign in / Create User with Google'}
-            </span>
+            <LogIn size={15} />
+            <span>Sign In</span>
           </button>
 
-          {!hasExistingGoogleAccount && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.72rem', color: '#a5b4fc' }}>
-              <Cloud size={13} color="#4285F4" />
-              <span>Includes automatic continuous backup to your Google Drive</span>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
-            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              or sign in with password
-            </span>
-            <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
-          </div>
-        </div>
-
-        {/* Error Alert */}
-        {errorMsg && (
-          <div
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => { setActiveTab('register'); setRegErrorMsg(''); }}
             style={{
-              background: 'rgba(244, 63, 94, 0.15)',
-              border: '1px solid rgba(244, 63, 94, 0.35)',
-              borderRadius: '12px',
-              padding: '10px 14px',
-              fontSize: '0.825rem',
-              color: '#fb7185',
+              flex: 1,
+              borderRadius: '9px',
+              padding: '9px',
+              fontWeight: 700,
+              fontSize: '0.88rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              justifyContent: 'center',
+              gap: '6px',
+              background: activeTab === 'register' ? '#10b981' : 'transparent',
+              color: activeTab === 'register' ? '#ffffff' : 'var(--text-dim)',
+              border: 'none',
+              boxShadow: activeTab === 'register' ? '0 2px 8px rgba(16, 185, 129, 0.4)' : 'none'
             }}
           >
-            <Lock size={15} />
-            <span>{errorMsg}</span>
+            <UserPlus size={15} />
+            <span>Register New Landlord</span>
+          </button>
+        </div>
+
+        {/* ========================================================= */}
+        {/* TAB 1: SIGN IN (GOOGLE ACCOUNT & CREDENTIALS) */}
+        {/* ========================================================= */}
+        {activeTab === 'signin' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* 1. PRIMARY: SIGN IN WITH GOOGLE ACCOUNT */}
+            <button
+              type="button"
+              onClick={handleTriggerGoogleOAuth}
+              disabled={isGoogleLoading}
+              style={{
+                background: '#ffffff',
+                color: '#1f2937',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '13px 18px',
+                fontSize: '0.94rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <GoogleIcon size={20} />
+              <span>
+                {hasExistingGoogleAccount
+                  ? `Continue with Google (${existingGoogleSession.email})`
+                  : 'Sign In with Google Account'}
+              </span>
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                or sign in with password
+              </span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+            </div>
+
+            {/* Error Alert */}
+            {errorMsg && (
+              <div
+                style={{
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  border: '1px solid rgba(244, 63, 94, 0.35)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  fontSize: '0.825rem',
+                  color: '#fb7185',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Lock size={15} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* Username & Password Form */}
+            <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Mail size={14} color="var(--primary)" /> Username or Email Address
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. admin or mohammedhussain7411@gmail.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <KeyRound size={14} color="var(--primary)" /> Landlord Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-dim)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.75rem'
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="form-input"
+                  placeholder="Enter your password (default: admin123)"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.825rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    style={{ accentColor: 'var(--primary)' }}
+                  />
+                  Remember on this device
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isLoading}
+                style={{
+                  padding: '12px',
+                  fontSize: '0.92rem',
+                  fontWeight: 700,
+                  width: '100%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isLoading ? (
+                  <span>Signing In...</span>
+                ) : (
+                  <>
+                    <span>Sign In to Landlord OS</span>
+                    <ArrowRight size={17} />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Quick Access Card for Landlord Mohammed Hussain */}
+            <div
+              style={{
+                background: 'rgba(99, 102, 241, 0.08)',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Sparkles size={13} /> Mohammed Hussain Portfolio
+                </span>
+                <span className="badge badge-paid" style={{ fontSize: '0.65rem' }}>
+                  37 Tenants Active
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleMohammedHussainAutoLogin}
+                style={{
+                  width: '100%',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  justifyContent: 'center',
+                  gap: '6px',
+                  background: 'rgba(99, 102, 241, 0.25)',
+                  border: '1px solid var(--primary)',
+                  marginTop: '2px'
+                }}
+              >
+                <Sparkles size={14} color="var(--primary)" /> 1-Tap Login as Mohammed Hussain (SFR Properties)
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Traditional Login Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Email / Username */}
-          <div className="form-group">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Mail size={14} color="var(--primary)" /> Username or Email Address
-            </label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="e.g. admin@renteasy.app"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-          </div>
+        {/* ========================================================= */}
+        {/* TAB 2: REGISTER NEW LANDLORD (START FRESH WITH OWN PROPERTIES) */}
+        {/* ========================================================= */}
+        {activeTab === 'register' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+              Create your own landlord workspace to track rent, units, tenants, and receipts on this device.
+            </p>
 
-          {/* Password */}
-          <div className="form-group">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-              <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <KeyRound size={14} color="var(--primary)" /> Landlord Password
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
+            {/* Register with Google Button */}
+            <button
+              type="button"
+              onClick={handleTriggerGoogleOAuth}
+              style={{
+                background: '#ffffff',
+                color: '#1f2937',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                fontSize: '0.9rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+              }}
+            >
+              <GoogleIcon size={18} />
+              <span>Register with Google Account</span>
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
+                or register with email
+              </span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+            </div>
+
+            {/* Registration Error Notice */}
+            {regErrorMsg && (
+              <div
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-dim)',
-                  cursor: 'pointer',
+                  background: 'rgba(244, 63, 94, 0.15)',
+                  border: '1px solid rgba(244, 63, 94, 0.35)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  fontSize: '0.825rem',
+                  color: '#fb7185',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
-                  fontSize: '0.75rem'
+                  gap: '8px'
                 }}
               >
-                {showPassword ? <EyeOff size={13} /> : <Eye size={13} />}
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
-            </div>
-
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                className="form-input"
-                placeholder="Enter your password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          {/* Remember Me */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.825rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-muted)' }}>
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={e => setRememberMe(e.target.checked)}
-                style={{ accentColor: 'var(--primary)' }}
-              />
-              Remember on this phone / PC
-            </label>
-          </div>
-
-          {/* Sign In Button */}
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={isLoading}
-            style={{
-              padding: '12px',
-              fontSize: '0.92rem',
-              fontWeight: 700,
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '8px',
-              marginTop: '2px'
-            }}
-          >
-            {isLoading ? (
-              <span>Logging in...</span>
-            ) : (
-              <>
-                <span>Sign In to Landlord OS</span>
-                <ArrowRight size={17} />
-              </>
+                <AlertCircle size={15} />
+                <span>{regErrorMsg}</span>
+              </div>
             )}
-          </button>
-        </form>
 
-        {/* Quick-Fill Credentials Card */}
-        <div
-          style={{
-            background: 'rgba(99, 102, 241, 0.08)',
-            border: '1px solid rgba(99, 102, 241, 0.25)',
-            borderRadius: '14px',
-            padding: '14px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <KeyRound size={13} /> Default Credentials
-            </span>
-            <span className="badge badge-paid" style={{ fontSize: '0.65rem' }}>
-              Ready to Use
-            </span>
+            <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rahul Sharma"
+                  className="form-input"
+                  value={regName}
+                  onChange={e => setRegName(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Property / Building Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sharma Residency or Villa Green"
+                  className="form-input"
+                  value={regCompany}
+                  onChange={e => setRegCompany(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="form-group">
+                  <label className="form-label">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. 9876543210"
+                    className="form-input"
+                    value={regPhone}
+                    onChange={e => setRegPhone(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. you@gmail.com"
+                    className="form-input"
+                    value={regEmail}
+                    onChange={e => setRegEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Set Landlord Password</label>
+                <input
+                  type="password"
+                  placeholder="Set your login password"
+                  className="form-input"
+                  value={regPassword}
+                  onChange={e => setRegPassword(e.target.value)}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isRegistering}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: 'none',
+                  padding: '12px',
+                  fontWeight: 700,
+                  fontSize: '0.92rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginTop: '4px'
+                }}
+              >
+                {isRegistering ? (
+                  <span>Creating Account...</span>
+                ) : (
+                  <>
+                    <UserPlus size={17} />
+                    <span>Create Landlord Account</span>
+                  </>
+                )}
+              </button>
+            </form>
           </div>
-
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => handleQuickLogin('admin@renteasy.app', 'admin123')}
-            style={{ width: '100%', fontSize: '0.82rem', fontWeight: 700, justifyContent: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.25)', border: '1px solid var(--primary)', marginTop: '2px' }}
-          >
-            <Sparkles size={14} color="var(--primary)" /> 1-Tap Auto-Login as Admin
-          </button>
-        </div>
+        )}
 
         {/* Security badge footer */}
         <div style={{ textAlign: 'center', fontSize: '0.72rem', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
           <ShieldCheck size={14} color="#10b981" />
-          <span>Encrypted Landlord Session • Real-time Sync & Auto-Drive Backup</span>
+          <span>Encrypted Landlord Session • Auto-Drive Backup & Real-time Sync</span>
         </div>
       </div>
 
-      {/* Google User Creation & Sign-In Modal */}
+      {/* ========================================================= */}
+      {/* GOOGLE SIGN IN DIALOG (CLEAN & DIRECT) */}
+      {/* ========================================================= */}
       {showGoogleModal && (
         <div className="modal-backdrop" onClick={() => setShowGoogleModal(false)}>
           <div
@@ -413,10 +715,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#fff' }}>
-                    Create User with Google
+                    Sign In with Google Account
                   </h3>
                   <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                    Continuous Google Drive auto-backup enabled
+                    Continuous Google Drive auto-backup will be linked
                   </p>
                 </div>
               </div>
@@ -425,91 +727,90 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </button>
             </div>
 
-            <form onSubmit={handleGoogleSubmit}>
-              <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Mail size={14} color="#4285F4" /> Google Account Email
-                  </label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    placeholder="e.g. yourname@gmail.com"
-                    value={googleEmail}
-                    onChange={e => setGoogleEmail(e.target.value)}
-                    required
-                    autoFocus
-                  />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-                    Used to sign in and automatically store backups in Google Drive.
-                  </span>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <User size={14} color="#4285F4" /> Your Full Name (Landlord Profile)
-                  </label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="e.g. Mohammed Hussain"
-                    value={googleName}
-                    onChange={e => setGoogleName(e.target.value)}
-                    required
-                  />
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-                    Your avatar logo and receipts will dynamically display these initials.
-                  </span>
-                </div>
-
-                {/* Auto Backup Toggle */}
-                <div style={{
+            <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Quick 1-Tap Pill for Mohammed Hussain if on this device */}
+              <div
+                style={{
                   padding: '12px 14px',
                   borderRadius: '10px',
-                  background: 'rgba(66, 133, 244, 0.1)',
-                  border: '1px solid rgba(66, 133, 244, 0.3)',
+                  background: 'rgba(66, 133, 244, 0.12)',
+                  border: '1px solid rgba(66, 133, 244, 0.35)',
                   display: 'flex',
-                  alignItems: 'flex-start',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                   gap: '10px'
-                }}>
-                  <input
-                    type="checkbox"
-                    id="chk-auto-backup"
-                    checked={googleAutoBackup}
-                    onChange={e => setGoogleAutoBackup(e.target.checked)}
-                    style={{ accentColor: '#4285F4', marginTop: '3px' }}
-                  />
-                  <label htmlFor="chk-auto-backup" style={{ fontSize: '0.78rem', color: '#e2e8f0', cursor: 'pointer', lineHeight: 1.4 }}>
-                    <strong style={{ color: '#93c5fd' }}>Continuous Auto-Backup to Google Drive:</strong>
-                    <div style={{ color: 'var(--text-dim)', fontSize: '0.72rem', marginTop: '2px' }}>
-                      Automatically archives a full snapshot whenever you add properties, record payments, or update records.
-                    </div>
-                  </label>
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>Mohammed Hussain</div>
+                  <div style={{ fontSize: '0.74rem', color: '#93c5fd' }}>mohammedhussain7411@gmail.com</div>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  style={{ background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)', border: 'none', whiteSpace: 'nowrap' }}
+                  onClick={() => handleConfirmGoogleSignIn('mohammedhussain7411@gmail.com', 'Mohammed Hussain')}
+                >
+                  Continue
+                </button>
               </div>
 
-              <div className="modal-footer" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowGoogleModal(false)}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={isGoogleLoading}
-                  style={{
-                    background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontWeight: 700
-                  }}
-                >
-                  <GoogleIcon size={16} />
-                  <span>{isGoogleLoading ? 'Creating User...' : 'Create Account & Sign In'}</span>
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>or enter any other Google account</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
               </div>
-            </form>
+
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Mail size={14} color="#4285F4" /> Google Account Email
+                </label>
+                <input
+                  type="email"
+                  className="form-input"
+                  placeholder="e.g. yourname@gmail.com"
+                  value={googleEmailInput}
+                  onChange={e => setGoogleEmailInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <User size={14} color="#4285F4" /> Landlord Name
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Mohammed Hussain"
+                  value={googleNameInput}
+                  onChange={e => setGoogleNameInput(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowGoogleModal(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={isGoogleLoading}
+                onClick={() => handleConfirmGoogleSignIn()}
+                style={{
+                  background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: 700
+                }}
+              >
+                <GoogleIcon size={16} />
+                <span>{isGoogleLoading ? 'Signing In...' : 'Sign In with Google'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

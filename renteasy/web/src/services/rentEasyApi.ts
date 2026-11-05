@@ -544,14 +544,24 @@ function loadOrInit<T>(key: string, defaultVal: T): T {
 function ensureInitialSeed(): void {
   if (typeof localStorage === 'undefined') return;
   try {
+    const isAuth = localStorage.getItem('renteasy_auth_token') === 'true' || sessionStorage.getItem('renteasy_auth_token') === 'true';
+    const loggedInEmail = (localStorage.getItem('renteasy_logged_in_email') || '').toLowerCase();
+
+    // Only auto-seed Mohammed Hussain's full portfolio if authenticated user is Mohammed Hussain or Admin
+    const isHussainOrAdmin = isAuth && (
+      loggedInEmail.includes('mohammedhussain') ||
+      loggedInEmail.includes('admin') ||
+      loggedInEmail === ''
+    );
+
     const rawTenants = localStorage.getItem(STORAGE_KEY_PREFIX + 'tenants');
     const parsedTenants = rawTenants ? JSON.parse(rawTenants) : [];
     const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
     const parsedProps = rawProps ? JSON.parse(rawProps) : [];
 
-    // If either tenants or properties are missing or empty, seed from default database!
-    if ((!Array.isArray(parsedTenants) || parsedTenants.length === 0 || !Array.isArray(parsedProps) || parsedProps.length === 0) && initialTenants.length > 0) {
-      console.log('[RentEasy] Auto-seeding complete portfolio database (37 tenants, 3 properties)...');
+    // If authenticated as Hussain/Admin and data is empty, seed from bundled database!
+    if (isHussainOrAdmin && (!Array.isArray(parsedTenants) || parsedTenants.length === 0 || !Array.isArray(parsedProps) || parsedProps.length === 0) && initialTenants.length > 0) {
+      console.log('[RentEasy] Seeding complete portfolio database (37 tenants, 3 properties)...');
       localStorage.setItem(STORAGE_KEY_PREFIX + 'landlord', JSON.stringify(initialLandlord));
       localStorage.setItem(STORAGE_KEY_PREFIX + 'properties', JSON.stringify(initialProperties));
       localStorage.setItem(STORAGE_KEY_PREFIX + 'tenants', JSON.stringify(initialTenants));
@@ -3205,6 +3215,70 @@ WITNESSES:
     return matchesEmail && matchesPass;
   }
 
+  registerNewLandlord(data: {
+    name: string;
+    email: string;
+    phone: string;
+    company_name?: string;
+    password?: string;
+  }): { success: boolean; landlord: Landlord; message?: string } {
+    const cleanEmail = data.email.trim();
+    const cleanName = data.name.trim();
+    const cleanPhone = data.phone.trim();
+    const cleanCompany = data.company_name?.trim() || `${cleanName}'s Properties`;
+
+    const newLandlord: Landlord = {
+      id: `ll-${Date.now()}`,
+      name: cleanName,
+      company_name: cleanCompany,
+      email: cleanEmail,
+      phone: cleanPhone,
+      upi_id: '',
+      timezone: 'Asia/Kolkata'
+    };
+
+    const isMohammedHussain = cleanEmail.toLowerCase().includes('mohammedhussain') || cleanPhone.includes('9738244056');
+    if (isMohammedHussain) {
+      this.restoreDefaultPortfolio();
+    } else {
+      // Brand new landlord starts with a clean slate
+      save('properties', []);
+      save('tenants', []);
+      save('leases', []);
+      save('rent_charges', []);
+      save('payments', []);
+      save('receipts', []);
+      save('property_owners', []);
+      save('rental_agreements', []);
+    }
+
+    save('landlord', newLandlord);
+    this.updateAuthCredentials(cleanEmail, data.password || 'admin123');
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('renteasy_auth_token', 'true');
+      localStorage.setItem('renteasy_logged_in_email', cleanEmail);
+      localStorage.setItem('renteasy_user_name', cleanName);
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('renteasy_explicit_logout');
+    }
+
+    // If logging in as Mohammed Hussain, link and ensure full SFR Properties portfolio
+    if (cleanEmail.toLowerCase().includes('mohammedhussain')) {
+      this.restoreDefaultPortfolio();
+    }
+
+    this.addAudit('landlord_registered', 'auth', 'landlord', `Registered new landlord account for ${cleanName} (${cleanEmail}).`);
+    this.pushCurrentDatabaseToServer();
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('renteasy_sync', { detail: { source: 'landlord_registered' } }));
+    }
+
+    return { success: true, landlord: newLandlord };
+  }
+
   // 5. GOOGLE DRIVE BACKUP & RESTORE SUITE
   getCompleteBackupData(): RentEasyBackupPayload {
     const landlord = this.getLandlord();
@@ -3919,6 +3993,11 @@ WITNESSES:
     }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('renteasy_explicit_logout');
+    }
+
+    // If logging in as Mohammed Hussain, link and ensure full SFR Properties portfolio
+    if (cleanEmail.toLowerCase().includes('mohammedhussain')) {
+      this.restoreDefaultPortfolio();
     }
 
     // 5. Audit log

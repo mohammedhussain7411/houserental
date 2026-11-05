@@ -51,12 +51,14 @@ import {
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof localStorage === 'undefined') return false;
     // If the user explicitly signed out in this session, show login screen
     if (sessionStorage.getItem('renteasy_explicit_logout') === 'true') {
       return false;
     }
-    // Default to true so all tabs, screens, and features are immediately accessible
-    return true;
+    // Only authenticate if user has a valid active token
+    const hasAuthToken = localStorage.getItem('renteasy_auth_token') === 'true' || sessionStorage.getItem('renteasy_auth_token') === 'true';
+    return Boolean(hasAuthToken);
   });
 
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
