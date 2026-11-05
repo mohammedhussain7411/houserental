@@ -279,8 +279,8 @@ const server = http.createServer((req, res) => {
 
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType);
-    // Cache static assets aggressively, keep index.html fresh
-    if (ext === '.html') {
+    // Cache static assets aggressively, keep index.html and service worker fresh
+    if (ext === '.html' || filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     } else {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
