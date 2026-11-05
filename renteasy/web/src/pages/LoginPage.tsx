@@ -41,6 +41,11 @@ const GoogleIcon: React.FC<{ size?: number }> = ({ size = 20 }) => (
   </svg>
 );
 
+// Validates genuine Google OAuth 2.0 Web Client ID format
+const isValidGoogleClientId = (id: string): boolean => {
+  return typeof id === 'string' && id.trim().endsWith('.apps.googleusercontent.com');
+};
+
 // Decodes standard JWT ID token payload from Google
 const decodeJwtPayload = (token: string): { email?: string; name?: string; picture?: string; sub?: string } | null => {
   try {
@@ -125,7 +130,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   // 2. INITIALIZE GOOGLE IDENTITY SERVICES (ONE TAP / SIGNED-IN ACCOUNTS ON PHONE)
   useEffect(() => {
     const clientId = rentEasyApi.getGoogleClientId();
-    if (!clientId) return;
+    if (!clientId || !isValidGoogleClientId(clientId)) {
+      // Clear invalid client ID from storage if corrupt
+      if (clientId && !isValidGoogleClientId(clientId) && typeof localStorage !== 'undefined') {
+        localStorage.removeItem('renteasy_google_client_id');
+      }
+      return;
+    }
 
     const setupGsi = () => {
       if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
@@ -162,7 +173,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     setErrorMsg('');
     const clientId = rentEasyApi.getGoogleClientId();
 
-    if (clientId && typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+    if (clientId && isValidGoogleClientId(clientId) && typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
         (window as any).google.accounts.id.initialize({
           client_id: clientId,
@@ -177,7 +188,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       }
     }
 
-    // If Client ID is not configured yet, open prompt to configure Client ID
+    // If Client ID is not configured yet or invalid, open setup modal
     setShowGoogleModal(true);
   };
 
@@ -187,8 +198,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     const cleanId = clientIdInput.trim();
     if (!cleanId) return;
 
+    if (!isValidGoogleClientId(cleanId)) {
+      setErrorMsg('Client ID must end with .apps.googleusercontent.com from Google Cloud Console.');
+      return;
+    }
+
     rentEasyApi.setGoogleClientId(cleanId);
-    setGoogleStatusNotice('Google Client ID saved! Connecting to your phone accounts...');
+    setGoogleStatusNotice('Google Client ID saved! Prompting phone accounts...');
 
     if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
       try {
