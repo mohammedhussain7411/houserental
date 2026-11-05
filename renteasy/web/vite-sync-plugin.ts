@@ -7,35 +7,36 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.resolve(__dirname, 'server-data');
+const USERS_DIR = path.resolve(DATA_DIR, 'users');
 const DB_FILE = path.resolve(DATA_DIR, 'renteasy-db.json');
 
+function getDbFileForEmail(email?: string): string | null {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return null; // Unauthenticated
+  if (clean.includes('mohammedhussain') || clean.includes('admin@renteasy') || clean === 'admin') {
+    const mhFile = path.resolve(USERS_DIR, 'mohammedhussain.json');
+    if (!fs.existsSync(mhFile) && fs.existsSync(DB_FILE)) {
+      try {
+        fs.copyFileSync(DB_FILE, mhFile);
+      } catch (e) {}
+    }
+    return fs.existsSync(mhFile) ? mhFile : DB_FILE;
+  }
+  const safeName = clean.replace(/[^a-z0-9_.-]/g, '_');
+  return path.resolve(USERS_DIR, `${safeName}.json`);
+}
+
 export function renteasySyncPlugin(): Plugin {
-  // Ensure data directory exists on startup
+  // Ensure data directories exist on startup
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-  } catch (err) {
-    console.error('[RentEasy Sync] Failed to create server-data directory:', err);
-  }
-
-  let cachedDb: any = null;
-  let revision: number = 0;
-  let updatedAt: string | null = null;
-
-  // Attempt initial load from disk if file exists
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      cachedDb = JSON.parse(raw);
-      revision = cachedDb?.meta?.revision || Date.now();
-      updatedAt = cachedDb?.meta?.updated_at || new Date().toISOString();
-      console.log(`[RentEasy Sync] Loaded central database from disk (Revision: ${revision})`);
-    } else {
-      console.log('[RentEasy Sync] Central database file initialized (ready to receive first sync)');
+    if (!fs.existsSync(USERS_DIR)) {
+      fs.mkdirSync(USERS_DIR, { recursive: true });
     }
   } catch (err) {
-    console.error('[RentEasy Sync] Error reading initial DB from disk:', err);
+    console.error('[RentEasy Sync] Failed to create server-data directory:', err);
   }
 
   const handleSyncRequest = (req: IncomingMessage, res: ServerResponse, next: () => void) => {
@@ -47,10 +48,18 @@ export function renteasySyncPlugin(): Plugin {
       return next();
     }
 
+    const queryMatch = rawUrl.match(/[?&]email=([^&]+)/);
+    const queryEmail = queryMatch ? decodeURIComponent(queryMatch[1]) : '';
+    const userEmail = (
+      req.headers['x-user-email'] ||
+      queryEmail ||
+      ''
+    ).toString().trim().toLowerCase();
+
     // Standard CORS headers for mobile phones and local network access
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-User-Email');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
     if (req.method === 'OPTIONS') {
@@ -59,50 +68,70 @@ export function renteasySyncPlugin(): Plugin {
       return;
     }
 
-    // 1. Version Check Endpoint (ultra-fast polling)
+    // 1. Version Check Endpoint (ultra-fast polling per user)
     if (parsedPath === '/api/sync/version' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 200;
+      if (!userEmail) {
+        res.end(JSON.stringify({ success: true, revision: 0, updated_at: null }));
+        return;
+      }
+      const targetFile = getDbFileForEmail(userEmail);
+      let userRev = 0;
+      let userUpAt = null;
+      try {
+        if (targetFile && fs.existsSync(targetFile)) {
+          const raw = fs.readFileSync(targetFile, 'utf-8');
+          const db = JSON.parse(raw);
+          userRev = db?.meta?.revision || 0;
+          userUpAt = db?.meta?.updated_at || null;
+        }
+      } catch (e) {}
       res.end(
         JSON.stringify({
           success: true,
-          revision,
-          updated_at: updatedAt
+          revision: userRev,
+          updated_at: userUpAt
         })
       );
       return;
     }
 
-    // 2. Full Sync Fetch
+    // 2. Full Sync Fetch (strictly isolated by account)
     if (parsedPath === '/api/sync' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 200;
 
-      // Check if file modified on disk directly
-      try {
-        if (fs.existsSync(DB_FILE)) {
-          const raw = fs.readFileSync(DB_FILE, 'utf-8');
-          cachedDb = JSON.parse(raw);
-          revision = cachedDb?.meta?.revision || revision;
-          updatedAt = cachedDb?.meta?.updated_at || updatedAt;
-        }
-      } catch (e) {
-        // use in-memory cachedDb
+      if (!userEmail) {
+        res.end(JSON.stringify({ success: true, exists: false, revision: 0, updated_at: null, data: null }));
+        return;
       }
 
-      res.end(
-        JSON.stringify({
-          success: true,
-          exists: !!cachedDb,
-          revision,
-          updated_at: updatedAt,
-          data: cachedDb?.data || cachedDb || null
-        })
-      );
+      const targetFile = getDbFileForEmail(userEmail);
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        res.end(JSON.stringify({ success: true, exists: false, revision: 0, updated_at: null, data: null }));
+        return;
+      }
+
+      try {
+        const raw = fs.readFileSync(targetFile, 'utf-8');
+        const db = JSON.parse(raw);
+        res.end(
+          JSON.stringify({
+            success: true,
+            exists: true,
+            revision: db?.meta?.revision || 0,
+            updated_at: db?.meta?.updated_at || null,
+            data: db?.data || db || null
+          })
+        );
+      } catch (e) {
+        res.end(JSON.stringify({ success: true, exists: false, data: null }));
+      }
       return;
     }
 
-    // 3. Save / Update Database
+    // 3. Save / Update Database (POST, per-user isolated)
     if (parsedPath === '/api/sync' && req.method === 'POST') {
       let bodyStr = '';
       req.on('data', chunk => {
@@ -112,36 +141,15 @@ export function renteasySyncPlugin(): Plugin {
       req.on('end', () => {
         try {
           const parsed = JSON.parse(bodyStr || '{}');
-          const incomingRev = Number(parsed.revision) || 0;
-
-          // Re-verify latest disk revision
-          try {
-            if (fs.existsSync(DB_FILE)) {
-              const raw = fs.readFileSync(DB_FILE, 'utf-8');
-              const currentDiskDb = JSON.parse(raw);
-              revision = currentDiskDb?.meta?.revision || revision;
-              updatedAt = currentDiskDb?.meta?.updated_at || updatedAt;
-            }
-          } catch (e) {}
-
-          // If incoming revision is strictly older than current server revision, reject to prevent stale overwrites
-          if (incomingRev > 0 && revision > 0 && incomingRev < revision) {
-            console.warn(`[RentEasy Sync] Rejecting stale push: incoming revision ${incomingRev} is older than server revision ${revision}`);
-            res.setHeader('Content-Type', 'application/json');
-            res.statusCode = 409;
-            res.end(
-              JSON.stringify({
-                success: false,
-                conflict: true,
-                message: 'Server database has newer updates',
-                revision,
-                updated_at: updatedAt
-              })
-            );
+          const effectiveEmail = (userEmail || parsed.email || parsed.meta?.user_email || '').trim().toLowerCase();
+          if (!effectiveEmail) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ success: false, error: 'User email required to sync database' }));
             return;
           }
 
-          const newRevision = incomingRev || Date.now();
+          const targetFile = getDbFileForEmail(effectiveEmail);
+          const newRevision = parsed.revision || Date.now();
           const newUpdatedAt = new Date().toISOString();
 
           const payloadToSave = {
@@ -149,19 +157,17 @@ export function renteasySyncPlugin(): Plugin {
               revision: newRevision,
               updated_at: newUpdatedAt,
               client_id: parsed.client_id || 'web-or-phone',
+              user_email: effectiveEmail,
               saved_at: newUpdatedAt
             },
             data: parsed.data || parsed
           };
 
-          // Save synchronously to disk
-          fs.writeFileSync(DB_FILE, JSON.stringify(payloadToSave, null, 2), 'utf-8');
+          if (targetFile) {
+            fs.writeFileSync(targetFile, JSON.stringify(payloadToSave, null, 2), 'utf-8');
+          }
 
-          cachedDb = payloadToSave;
-          revision = newRevision;
-          updatedAt = newUpdatedAt;
-
-          console.log(`[RentEasy Sync] Successfully synced database. Revision: ${revision} at ${newUpdatedAt}`);
+          console.log(`[RentEasy Sync] Successfully synced database for ${effectiveEmail}. Revision: ${newRevision} at ${newUpdatedAt}`);
 
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
@@ -179,7 +185,7 @@ export function renteasySyncPlugin(): Plugin {
           res.end(
             JSON.stringify({
               success: false,
-              error: err?.message || 'Invalid JSON payload'
+              error: err?.message || 'Invalid JSON'
             })
           );
         }

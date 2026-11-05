@@ -541,27 +541,31 @@ function loadOrInit<T>(key: string, defaultVal: T): T {
   }
 }
 
+export function isCurrentUserMohammedHussain(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  const isAuth = localStorage.getItem('renteasy_auth_token') === 'true' || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true');
+  if (!isAuth) return false;
+  const loggedInEmail = (localStorage.getItem('renteasy_logged_in_email') || '').toLowerCase().trim();
+  return loggedInEmail.includes('mohammedhussain') || loggedInEmail === 'admin@renteasy.app';
+}
+
 function ensureInitialSeed(): void {
   if (typeof localStorage === 'undefined') return;
   try {
-    const isAuth = localStorage.getItem('renteasy_auth_token') === 'true' || sessionStorage.getItem('renteasy_auth_token') === 'true';
-    const loggedInEmail = (localStorage.getItem('renteasy_logged_in_email') || '').toLowerCase();
-
-    // Only auto-seed Mohammed Hussain's full portfolio if authenticated user is Mohammed Hussain or Admin
-    const isHussainOrAdmin = isAuth && (
-      loggedInEmail.includes('mohammedhussain') ||
-      loggedInEmail.includes('admin') ||
-      loggedInEmail === ''
-    );
+    const isHussain = isCurrentUserMohammedHussain();
+    if (!isHussain) {
+      // STRICT: Never auto-seed Mohammed Hussain's data for unauthenticated or other users!
+      return;
+    }
 
     const rawTenants = localStorage.getItem(STORAGE_KEY_PREFIX + 'tenants');
     const parsedTenants = rawTenants ? JSON.parse(rawTenants) : [];
     const rawProps = localStorage.getItem(STORAGE_KEY_PREFIX + 'properties');
     const parsedProps = rawProps ? JSON.parse(rawProps) : [];
 
-    // If authenticated as Hussain/Admin and data is empty, seed from bundled database!
-    if (isHussainOrAdmin && (!Array.isArray(parsedTenants) || parsedTenants.length === 0 || !Array.isArray(parsedProps) || parsedProps.length === 0) && initialTenants.length > 0) {
-      console.log('[RentEasy] Seeding complete portfolio database (37 tenants, 3 properties)...');
+    // If authenticated as Mohammed Hussain and data is empty, seed his portfolio
+    if ((!Array.isArray(parsedTenants) || parsedTenants.length === 0 || !Array.isArray(parsedProps) || parsedProps.length === 0) && initialTenants.length > 0) {
+      console.log('[RentEasy] Seeding Mohammed Hussain portfolio database (Properties A & C, 33 tenants)...');
       localStorage.setItem(STORAGE_KEY_PREFIX + 'landlord', JSON.stringify(initialLandlord));
       localStorage.setItem(STORAGE_KEY_PREFIX + 'properties', JSON.stringify(initialProperties));
       localStorage.setItem(STORAGE_KEY_PREFIX + 'tenants', JSON.stringify(initialTenants));
@@ -930,7 +934,19 @@ class RentEasyApiService {
 
   // Landlord
   getLandlord(): Landlord {
-    return loadOrInit('landlord', initialLandlord);
+    const isHussain = isCurrentUserMohammedHussain();
+    const loggedInEmail = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') || '' : '';
+    const loggedInName = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_user_name') || '' : '';
+    const genericFallback: Landlord = {
+      id: 'll-user',
+      name: loggedInName || 'Landlord',
+      email: loggedInEmail,
+      phone: '',
+      company_name: loggedInName ? `${loggedInName}'s Properties` : 'My Properties',
+      upi_id: '',
+      timezone: 'Asia/Kolkata'
+    };
+    return loadOrInit('landlord', isHussain ? initialLandlord : genericFallback);
   }
 
   updateLandlord(data: Partial<Landlord>): Landlord {
@@ -942,8 +958,11 @@ class RentEasyApiService {
 
   // Properties & Units
   getProperties(): Property[] {
-    const properties = loadOrInit('properties', initialProperties);
-    const tenants = loadOrInit('tenants', initialTenants);
+    const isHussain = isCurrentUserMohammedHussain();
+    const fallbackProps = isHussain ? initialProperties : [];
+    const fallbackTenants = isHussain ? initialTenants : [];
+    const properties = loadOrInit('properties', fallbackProps);
+    const tenants = loadOrInit('tenants', fallbackTenants);
     let updated = false;
 
     for (const p of properties) {
@@ -1517,8 +1536,10 @@ class RentEasyApiService {
 
   // Tenants & House Balances
   getTenants(): Tenant[] {
+    const isHussain = isCurrentUserMohammedHussain();
+    const fallbackTenants = isHussain ? initialTenants : [];
     this.recalculateTenantBalances();
-    return loadOrInit('tenants', initialTenants);
+    return loadOrInit('tenants', fallbackTenants);
   }
 
   addTenant(data: {
@@ -3195,24 +3216,102 @@ WITNESSES:
     this.addAudit('credentials_updated', 'landlord', 'll-001', `Updated landlord login credentials for ${email}`);
   }
 
+  logout(): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('renteasy_auth_token');
+      localStorage.removeItem('renteasy_logged_in_email');
+      localStorage.removeItem('renteasy_auth_provider');
+      localStorage.removeItem('renteasy_user_name');
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('renteasy_auth_token');
+      sessionStorage.setItem('renteasy_explicit_logout', 'true');
+    }
+    this.logoutGoogleDrive();
+    _currentLocalRevision = 0;
+  }
+
   verifyLogin(email: string, password: string): boolean {
-    const creds = this.getAuthCredentials();
     const cleanInputEmail = email.trim().toLowerCase();
-    const cleanStoredEmail = creds.email.trim().toLowerCase();
+    const cleanPass = password.trim();
+    if (!cleanInputEmail || !cleanPass) return false;
 
-    const landlord = this.getLandlord();
-    const landlordEmail = (landlord.email || '').trim().toLowerCase();
-
-    const matchesEmail =
-      cleanInputEmail === cleanStoredEmail ||
-      cleanInputEmail === landlordEmail ||
+    // 1. Mohammed Hussain / Master Admin Account
+    const isMohammedHussain =
+      cleanInputEmail.includes('mohammedhussain') ||
       cleanInputEmail === 'admin' ||
-      cleanInputEmail === 'admin@renteasy.app' ||
-      cleanInputEmail === 'rajesh' ||
-      cleanInputEmail === 'rajesh.sharma@renteasy.app';
+      cleanInputEmail === 'admin@renteasy.app';
 
-    const matchesPass = password.trim() === creds.passwordPlain || password.trim() === 'admin123';
-    return matchesEmail && matchesPass;
+    const creds = this.getAuthCredentials();
+
+    if (isMohammedHussain) {
+      const matchPass = cleanPass === creds.passwordPlain || cleanPass === 'admin123';
+      if (matchPass) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('renteasy_auth_token', 'true');
+          localStorage.setItem('renteasy_logged_in_email', 'mohammedhussain7411@gmail.com');
+          localStorage.setItem('renteasy_user_name', 'Mohammed Hussain');
+        }
+        this.restoreDefaultPortfolio();
+        this.addAudit('login_success', 'auth', 'landlord', `Mohammed Hussain signed in successfully.`);
+        return true;
+      }
+      return false;
+    }
+
+    // 2. Registered Landlord Accounts Check
+    const registered = loadOrInit<Array<{ email: string; passwordPlain: string; name: string; company_name?: string; phone?: string }>>('registered_accounts', []);
+    const foundAcc = registered.find(a => a.email.toLowerCase() === cleanInputEmail);
+    if (foundAcc) {
+      if (cleanPass === foundAcc.passwordPlain) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('renteasy_auth_token', 'true');
+          localStorage.setItem('renteasy_logged_in_email', foundAcc.email);
+          localStorage.setItem('renteasy_user_name', foundAcc.name);
+        }
+        // Isolate landlord profile for foundAcc
+        const currentLl = this.getLandlord();
+        if (currentLl.email.toLowerCase() !== foundAcc.email.toLowerCase()) {
+          save('landlord', {
+            id: `ll-${Date.now()}`,
+            name: foundAcc.name,
+            company_name: foundAcc.company_name || `${foundAcc.name}'s Properties`,
+            email: foundAcc.email,
+            phone: foundAcc.phone || '',
+            upi_id: '',
+            timezone: 'Asia/Kolkata'
+          });
+          // Brand new landlord has clean isolated portfolio - never leak Mohammed Hussain's data!
+          save('properties', []);
+          save('tenants', []);
+          save('leases', []);
+          save('rent_charges', []);
+          save('payments', []);
+          save('receipts', []);
+          save('property_owners', []);
+          save('rental_agreements', []);
+        }
+        this.addAudit('login_success', 'auth', 'landlord', `${foundAcc.name} (${foundAcc.email}) signed in successfully.`);
+        return true;
+      }
+      return false;
+    }
+
+    // 3. Active Landlord Profile in storage (if registered without accounts array)
+    const activeLl = this.getLandlord();
+    if ((activeLl.email || '').trim().toLowerCase() === cleanInputEmail) {
+      if (cleanPass === creds.passwordPlain) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('renteasy_auth_token', 'true');
+          localStorage.setItem('renteasy_logged_in_email', activeLl.email);
+          localStorage.setItem('renteasy_user_name', activeLl.name);
+        }
+        return true;
+      }
+    }
+
+    // Invalid credentials
+    return false;
   }
 
   registerNewLandlord(data: {
@@ -3226,6 +3325,7 @@ WITNESSES:
     const cleanName = data.name.trim();
     const cleanPhone = data.phone.trim();
     const cleanCompany = data.company_name?.trim() || `${cleanName}'s Properties`;
+    const cleanPassword = (data.password || 'admin123').trim();
 
     const newLandlord: Landlord = {
       id: `ll-${Date.now()}`,
@@ -3236,6 +3336,23 @@ WITNESSES:
       upi_id: '',
       timezone: 'Asia/Kolkata'
     };
+
+    // Save into registered accounts directory for reliable multi-landlord authentication
+    const registered = loadOrInit<Array<{ email: string; passwordPlain: string; name: string; company_name?: string; phone?: string }>>('registered_accounts', []);
+    const existingIdx = registered.findIndex(a => a.email.toLowerCase() === cleanEmail.toLowerCase());
+    const accObj = {
+      email: cleanEmail,
+      passwordPlain: cleanPassword,
+      name: cleanName,
+      company_name: cleanCompany,
+      phone: cleanPhone
+    };
+    if (existingIdx >= 0) {
+      registered[existingIdx] = accObj;
+    } else {
+      registered.push(accObj);
+    }
+    saveLocalOnly('registered_accounts', registered);
 
     const isMohammedHussain = cleanEmail.toLowerCase().includes('mohammedhussain') || cleanPhone.includes('9738244056');
     if (isMohammedHussain) {
@@ -3253,7 +3370,7 @@ WITNESSES:
     }
 
     save('landlord', newLandlord);
-    this.updateAuthCredentials(cleanEmail, data.password || 'admin123');
+    this.updateAuthCredentials(cleanEmail, cleanPassword);
 
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('renteasy_auth_token', 'true');
@@ -3262,11 +3379,6 @@ WITNESSES:
     }
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('renteasy_explicit_logout');
-    }
-
-    // If logging in as Mohammed Hussain, link and ensure full SFR Properties portfolio
-    if (cleanEmail.toLowerCase().includes('mohammedhussain')) {
-      this.restoreDefaultPortfolio();
     }
 
     this.addAudit('landlord_registered', 'auth', 'landlord', `Registered new landlord account for ${cleanName} (${cleanEmail}).`);
@@ -3996,8 +4108,19 @@ WITNESSES:
     }
 
     // If logging in as Mohammed Hussain, link and ensure full SFR Properties portfolio
-    if (cleanEmail.toLowerCase().includes('mohammedhussain')) {
+    const isMohammedHussain = cleanEmail.toLowerCase().includes('mohammedhussain') || cleanEmail.toLowerCase() === 'mohammedhussain7411@gmail.com';
+    if (isMohammedHussain) {
       this.restoreDefaultPortfolio();
+    } else {
+      // STRICT ISOLATION: A new or different Google user gets their own blank database - never leak another user's portfolio!
+      save('properties', []);
+      save('tenants', []);
+      save('leases', []);
+      save('rent_charges', []);
+      save('payments', []);
+      save('receipts', []);
+      save('property_owners', []);
+      save('rental_agreements', []);
     }
 
     // 5. Audit log
@@ -4312,6 +4435,12 @@ WITNESSES:
 
   async pushCurrentDatabaseToServer(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
+    const userEmail = (typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') : '') || '';
+    const isAuth = typeof localStorage !== 'undefined' && (localStorage.getItem('renteasy_auth_token') === 'true' || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true'));
+    if (!isAuth || !userEmail) {
+      this.updateSyncStatus({ isSyncing: false });
+      return false;
+    }
     this.updateSyncStatus({ isSyncing: true });
 
     try {
@@ -4319,12 +4448,16 @@ WITNESSES:
       const body = {
         revision: _currentLocalRevision || Date.now(),
         client_id: CLIENT_INSTANCE_ID,
+        email: userEmail,
         data: dataPayload
       };
 
-      const res = await fetch(getSyncEndpoint(), {
+      const res = await fetch(getSyncEndpoint(`?email=${encodeURIComponent(userEmail)}`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Email': userEmail
+        },
         body: JSON.stringify(body)
       });
 
@@ -4423,12 +4556,21 @@ WITNESSES:
 
   async pullDatabaseFromServer(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
+    const userEmail = (typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') : '') || '';
+    const isAuth = typeof localStorage !== 'undefined' && (localStorage.getItem('renteasy_auth_token') === 'true' || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true'));
+    if (!isAuth || !userEmail) {
+      this.updateSyncStatus({ isSyncing: false });
+      return false;
+    }
     this.updateSyncStatus({ isSyncing: true });
 
     try {
-      const res = await fetch(getSyncEndpoint(), {
+      const res = await fetch(getSyncEndpoint(`?email=${encodeURIComponent(userEmail)}`), {
         method: 'GET',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: {
+          'Cache-Control': 'no-cache',
+          'X-User-Email': userEmail
+        }
       });
 
       if (!res.ok) {
@@ -4514,10 +4656,18 @@ WITNESSES:
 
   async checkServerRevision(): Promise<void> {
     if (typeof window === 'undefined') return;
+    const userEmail = (typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') : '') || '';
+    const isAuth = typeof localStorage !== 'undefined' && (localStorage.getItem('renteasy_auth_token') === 'true' || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true'));
+    if (!isAuth || !userEmail) {
+      return;
+    }
     try {
-      const res = await fetch(getSyncEndpoint('/version'), {
+      const res = await fetch(getSyncEndpoint(`/version?email=${encodeURIComponent(userEmail)}`), {
         method: 'GET',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: {
+          'Cache-Control': 'no-cache',
+          'X-User-Email': userEmail
+        }
       });
 
       if (!res.ok) {

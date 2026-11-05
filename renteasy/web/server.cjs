@@ -6,15 +6,35 @@ const url = require('node:url');
 const PORT = parseInt(process.env.PORT || '10000', 10);
 const DIST_DIR = path.resolve(__dirname, 'dist');
 const DATA_DIR = path.resolve(__dirname, 'server-data');
+const USERS_DIR = path.resolve(DATA_DIR, 'users');
 const DB_FILE = path.resolve(DATA_DIR, 'renteasy-db.json');
 
-// Ensure data directory exists
+// Ensure data directories exist
 try {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
+  if (!fs.existsSync(USERS_DIR)) {
+    fs.mkdirSync(USERS_DIR, { recursive: true });
+  }
 } catch (err) {
   console.error('[RentEasy Server] Failed to create server-data directory:', err);
+}
+
+function getDbFileForEmail(email) {
+  const clean = (email || '').trim().toLowerCase();
+  if (!clean) return null; // Unauthenticated
+  if (clean.includes('mohammedhussain') || clean.includes('admin@renteasy') || clean === 'admin') {
+    const mhFile = path.resolve(USERS_DIR, 'mohammedhussain.json');
+    if (!fs.existsSync(mhFile) && fs.existsSync(DB_FILE)) {
+      try {
+        fs.copyFileSync(DB_FILE, mhFile);
+      } catch (e) {}
+    }
+    return fs.existsSync(mhFile) ? mhFile : DB_FILE;
+  }
+  const safeName = clean.replace(/[^a-z0-9_.-]/g, '_');
+  return path.resolve(USERS_DIR, `${safeName}.json`);
 }
 
 let cachedDb = null;
@@ -59,12 +79,17 @@ const MIME_TYPES = {
 const server = http.createServer((req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname || '/';
+  const userEmail = (
+    req.headers['x-user-email'] ||
+    parsedUrl.query?.email ||
+    ''
+  ).toString().trim().toLowerCase();
 
   // Always enable CORS for API routes so mobile phones and local network clients can sync
   if (pathname.startsWith('/api/')) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-User-Email');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
     if (req.method === 'OPTIONS') {
@@ -73,50 +98,71 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // 1. Version check endpoint
+    // 1. Version check endpoint (per-user)
     if (pathname === '/api/sync/version' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 200;
+      if (!userEmail) {
+        res.end(JSON.stringify({ success: true, revision: 0, updated_at: null }));
+        return;
+      }
+      const targetFile = getDbFileForEmail(userEmail);
+      let userRev = 0;
+      let userUpAt = null;
+      try {
+        if (targetFile && fs.existsSync(targetFile)) {
+          const raw = fs.readFileSync(targetFile, 'utf-8');
+          const db = JSON.parse(raw);
+          userRev = db?.meta?.revision || 0;
+          userUpAt = db?.meta?.updated_at || null;
+        }
+      } catch (e) {}
       res.end(
         JSON.stringify({
           success: true,
-          revision,
-          updated_at: updatedAt
+          revision: userRev,
+          updated_at: userUpAt
         })
       );
       return;
     }
 
-    // 2. Full Sync Fetch
+    // 2. Full Sync Fetch (strictly isolated by account)
     if (pathname === '/api/sync' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 200;
 
-      // Re-check disk if modified externally
-      try {
-        if (fs.existsSync(DB_FILE)) {
-          const raw = fs.readFileSync(DB_FILE, 'utf-8');
-          cachedDb = JSON.parse(raw);
-          revision = cachedDb?.meta?.revision || revision;
-          updatedAt = cachedDb?.meta?.updated_at || updatedAt;
-        }
-      } catch (e) {
-        // Use in-memory cachedDb
+      if (!userEmail) {
+        // Unauthenticated client never receives another user's database
+        res.end(JSON.stringify({ success: true, exists: false, revision: 0, updated_at: null, data: null }));
+        return;
       }
 
-      res.end(
-        JSON.stringify({
-          success: true,
-          exists: !!cachedDb,
-          revision,
-          updated_at: updatedAt,
-          data: cachedDb?.data || cachedDb || null
-        })
-      );
+      const targetFile = getDbFileForEmail(userEmail);
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        res.end(JSON.stringify({ success: true, exists: false, revision: 0, updated_at: null, data: null }));
+        return;
+      }
+
+      try {
+        const raw = fs.readFileSync(targetFile, 'utf-8');
+        const db = JSON.parse(raw);
+        res.end(
+          JSON.stringify({
+            success: true,
+            exists: true,
+            revision: db?.meta?.revision || 0,
+            updated_at: db?.meta?.updated_at || null,
+            data: db?.data || db || null
+          })
+        );
+      } catch (e) {
+        res.end(JSON.stringify({ success: true, exists: false, data: null }));
+      }
       return;
     }
 
-    // 3. Save / Update Database (POST)
+    // 3. Save / Update Database (POST, per-user isolated)
     if (pathname === '/api/sync' && req.method === 'POST') {
       let bodyStr = '';
       req.on('data', chunk => {
@@ -126,6 +172,14 @@ const server = http.createServer((req, res) => {
       req.on('end', () => {
         try {
           const parsed = JSON.parse(bodyStr || '{}');
+          const effectiveEmail = (userEmail || parsed.email || parsed.meta?.user_email || '').trim().toLowerCase();
+          if (!effectiveEmail) {
+            res.statusCode = 401;
+            res.end(JSON.stringify({ success: false, error: 'User email required to sync database' }));
+            return;
+          }
+
+          const targetFile = getDbFileForEmail(effectiveEmail);
           const newRevision = parsed.revision || Date.now();
           const newUpdatedAt = new Date().toISOString();
 
@@ -134,6 +188,7 @@ const server = http.createServer((req, res) => {
               revision: newRevision,
               updated_at: newUpdatedAt,
               client_id: parsed.client_id || 'web-or-phone',
+              user_email: effectiveEmail,
               saved_at: newUpdatedAt
             },
             data: parsed.data || parsed
@@ -169,15 +224,10 @@ const server = http.createServer((req, res) => {
             }
           }
 
-          // Save synchronously to disk
-          fs.writeFileSync(DB_FILE, JSON.stringify(payloadToSave, null, 2), 'utf-8');
+          // Save synchronously to user's isolated file
+          fs.writeFileSync(targetFile, JSON.stringify(payloadToSave, null, 2), 'utf-8');
 
-          cachedDb = payloadToSave;
-          revision = newRevision;
-          updatedAt = newUpdatedAt;
-
-          console.log(`[RentEasy Server] Synced database successfully. Revision: ${revision} at ${newUpdatedAt}`);
-
+          console.log(`[RentEasy Server] Synced database for ${effectiveEmail}. Revision: ${newRevision} at ${newUpdatedAt}`);
           res.setHeader('Content-Type', 'application/json');
           res.statusCode = 200;
           res.end(
@@ -188,15 +238,9 @@ const server = http.createServer((req, res) => {
             })
           );
         } catch (err) {
-          console.error('[RentEasy Server] Failed to save POST sync:', err);
-          res.setHeader('Content-Type', 'application/json');
-          res.statusCode = 400;
-          res.end(
-            JSON.stringify({
-              success: false,
-              error: err?.message || 'Invalid JSON payload'
-            })
-          );
+          console.error('[RentEasy Server] Error saving user sync:', err);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ success: false, error: err.message }));
         }
       });
       return;

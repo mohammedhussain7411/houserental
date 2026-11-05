@@ -69,18 +69,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
   // Google Sign-In Modal / Flow State
   const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const existingGoogleSession = rentEasyApi.getGoogleDriveSession();
-  const hasExistingGoogleAccount = Boolean(existingGoogleSession && existingGoogleSession.isConnected && existingGoogleSession.email);
-
-  const [googleEmailInput, setGoogleEmailInput] = useState(existingGoogleSession?.email || 'mohammedhussain7411@gmail.com');
-  const [googleNameInput, setGoogleNameInput] = useState(existingGoogleSession?.name || 'Mohammed Hussain');
+  const [clientIdInput, setClientIdInput] = useState(rentEasyApi.getGoogleClientId() || '');
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // 1. REAL GOOGLE OAUTH POPUP TRIGGER
+  // 1. REAL GOOGLE OAUTH POPUP TRIGGER (AUTHENTIC GOOGLE VERIFICATION)
   const handleTriggerGoogleOAuth = () => {
+    setErrorMsg('');
     const clientId = rentEasyApi.getGoogleClientId();
 
-    // If client ID is configured and Google SDK is present, launch native Google popup
+    // If client ID is configured and Google GIS SDK is present, launch official Google popup
     if (clientId && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
       try {
         setIsGoogleLoading(true);
@@ -94,6 +91,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
                 });
                 const profile = await userRes.json();
+                if (!profile || !profile.email) {
+                  throw new Error('Google authentication succeeded but email was not provided.');
+                }
                 rentEasyApi.setGoogleDriveOAuthSession(
                   tokenResponse.access_token,
                   tokenResponse.expires_in || 3600,
@@ -104,7 +104,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 rentEasyApi.createUserWithGoogle(profile.email, profile.name);
                 onLoginSuccess();
               } catch (err: any) {
-                alert(`Google sign in profile fetch failed: ${err.message}`);
+                setErrorMsg(`Google account verification failed: ${err.message}`);
               } finally {
                 setIsGoogleLoading(false);
               }
@@ -116,34 +116,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         tokenClient.requestAccessToken({ prompt: 'consent' });
         return;
       } catch (err: any) {
-        console.warn('OAuth tokenClient failed, showing direct Google sign in modal:', err);
+        console.warn('OAuth tokenClient failed, opening configuration modal:', err);
+        setIsGoogleLoading(false);
       }
     }
 
-    // Default direct Google Sign In flow (no manual Google Client ID setup required)
+    // Google Client ID is not configured yet; prompt user to enter their Client ID
     setShowGoogleModal(true);
   };
 
-  // 2. CONFIRM SIGN IN WITH GOOGLE
-  const handleConfirmGoogleSignIn = (targetEmail?: string, targetName?: string) => {
-    const finalEmail = (targetEmail || googleEmailInput).trim();
-    const finalName = (targetName || googleNameInput).trim();
-
-    if (!finalEmail || !finalEmail.includes('@')) {
-      alert('Please enter a valid Google Account email.');
-      return;
-    }
-
-    setIsGoogleLoading(true);
-    setTimeout(() => {
-      rentEasyApi.createUserWithGoogle(finalEmail, finalName);
-      setIsGoogleLoading(false);
-      setShowGoogleModal(false);
-      onLoginSuccess();
-    }, 300);
-  };
-
-  // 3. TRADITIONAL USERNAME/EMAIL SIGN IN
+  // 2. TRADITIONAL USERNAME/EMAIL SIGN IN
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -154,20 +136,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       if (isValid) {
         if (rememberMe) {
           localStorage.setItem('renteasy_auth_token', 'true');
-          localStorage.setItem('renteasy_logged_in_email', email);
+          localStorage.setItem('renteasy_logged_in_email', email.trim().toLowerCase());
         } else {
           sessionStorage.setItem('renteasy_auth_token', 'true');
         }
         sessionStorage.removeItem('renteasy_explicit_logout');
         onLoginSuccess();
       } else {
-        setErrorMsg('Invalid login credentials. Check username/password or sign in with Google below.');
+        setErrorMsg('Invalid email or password. Please verify your credentials or register a new landlord account.');
         setIsLoading(false);
       }
     }, 300);
   };
 
-  // 4. REGISTER NEW LANDLORD ACCOUNT
+  // 3. REGISTER NEW LANDLORD ACCOUNT
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setRegErrorMsg('');
@@ -184,6 +166,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       setRegErrorMsg('Please enter your phone number.');
       return;
     }
+    if (!regPassword.trim() || regPassword.trim().length < 4) {
+      setRegErrorMsg('Please choose a password with at least 4 characters.');
+      return;
+    }
 
     setIsRegistering(true);
     setTimeout(() => {
@@ -193,7 +179,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           company_name: regCompany,
           email: regEmail,
           phone: regPhone,
-          password: regPassword || 'admin123'
+          password: regPassword.trim()
         });
 
         if (res.success) {
@@ -356,11 +342,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               }}
             >
               <GoogleIcon size={20} />
-              <span>
-                {hasExistingGoogleAccount
-                  ? `Continue with Google (${existingGoogleSession.email})`
-                  : 'Sign In with Google Account'}
-              </span>
+              <span>{isGoogleLoading ? 'Connecting to Google...' : 'Sign In with Google Account'}</span>
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -400,7 +382,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. admin or mohammedhussain7411@gmail.com"
+                  placeholder="Enter your email or username"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
@@ -434,7 +416,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   className="form-input"
-                  placeholder="Enter your password (default: admin123)"
+                  placeholder="Enter your password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
@@ -665,10 +647,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#fff' }}>
-                    Sign In with Google Account
+                    Connect Google Sign-In &amp; Drive
                   </h3>
                   <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                    Continuous Google Drive auto-backup will be linked
+                    Official Google OAuth 2.0 Security
                   </p>
                 </div>
               </div>
@@ -678,37 +660,57 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-                Sign in with your Google email address to link your account and access previous Google Drive backups:
-              </p>
-
-              <div className="form-group">
-                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Mail size={14} color="#4285F4" /> Google Account Email Address *
-                </label>
-                <input
-                  type="email"
-                  className="form-input"
-                  placeholder="e.g. yourname@gmail.com"
-                  value={googleEmailInput}
-                  onChange={e => setGoogleEmailInput(e.target.value)}
-                  required
-                  autoFocus
-                />
+              <div style={{
+                background: 'rgba(99, 102, 241, 0.12)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                fontSize: '0.825rem',
+                color: '#c7d2fe',
+                lineHeight: 1.5
+              }}>
+                <div style={{ fontWeight: 700, color: '#818cf8', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={16} /> Genuine Google Authentication
+                </div>
+                <div>
+                  Google requires an authorized OAuth Client ID to securely verify your Google Account with Google's servers and link continuous Google Drive auto-backups.
+                </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <User size={14} color="#4285F4" /> Your Full Name (Optional)
+                  <KeyRound size={14} color="#4285F4" /> Google OAuth 2.0 Client ID
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Your Name"
-                  value={googleNameInput}
-                  onChange={e => setGoogleNameInput(e.target.value)}
+                  placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                  value={clientIdInput}
+                  onChange={e => setClientIdInput(e.target.value)}
+                  autoFocus
                 />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px', display: 'block' }}>
+                  Available from your free Google Cloud Console &gt; APIs &amp; Services &gt; Credentials.
+                </span>
               </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>or</span>
+                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowGoogleModal(false);
+                  setActiveTab('signin');
+                }}
+                style={{ padding: '10px', fontSize: '0.85rem', justifyContent: 'center' }}
+              >
+                Sign In with Landlord Email &amp; Password
+              </button>
             </div>
 
             <div className="modal-footer" style={{ padding: '14px 20px', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
@@ -718,8 +720,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={isGoogleLoading}
-                onClick={() => handleConfirmGoogleSignIn()}
+                disabled={!clientIdInput.trim() || isGoogleLoading}
+                onClick={() => {
+                  rentEasyApi.setGoogleClientId(clientIdInput.trim());
+                  setShowGoogleModal(false);
+                  handleTriggerGoogleOAuth();
+                }}
                 style={{
                   background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
                   border: 'none',
@@ -730,7 +736,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 }}
               >
                 <GoogleIcon size={16} />
-                <span>{isGoogleLoading ? 'Signing In...' : 'Sign In with Google'}</span>
+                <span>Save &amp; Open Google Sign-In</span>
               </button>
             </div>
           </div>

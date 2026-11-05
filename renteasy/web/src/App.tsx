@@ -273,9 +273,7 @@ export function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('renteasy_auth_token');
-    sessionStorage.removeItem('renteasy_auth_token');
-    sessionStorage.setItem('renteasy_explicit_logout', 'true');
+    rentEasyApi.logout();
     setIsAuthenticated(false);
   };
 
