@@ -1,4 +1,4 @@
-const CACHE_NAME = 'renteasy-pwa-v6-direct-google-auth';
+const CACHE_NAME = 'renteasy-pwa-v7-privacy-google-auth';
 const BASE = self.location.pathname.replace(/sw\.js$/, '');
 
 self.addEventListener('install', (event) => {
