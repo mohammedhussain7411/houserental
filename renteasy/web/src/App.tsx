@@ -63,10 +63,20 @@ export function App() {
 
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const [isMobileMode, setIsMobileMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      // If on mobile screen or mobile device, always default to native mobile view!
+      const isMobileDevice = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobileDevice) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem('renteasy_device_mode');
+        }
+        return true;
+      }
+    }
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_device_mode') : null;
-    if (saved === 'desktop') return false;
     if (saved === 'mobile') return true;
-    return typeof window !== 'undefined' && window.innerWidth <= 768;
+    if (saved === 'desktop') return false;
+    return false;
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isIconOnlySidebar, setIsIconOnlySidebar] = useState<boolean>(false);
@@ -81,30 +91,25 @@ export function App() {
       if (mobile) {
         document.documentElement.classList.remove('forced-laptop-mode');
         if (meta) {
-          meta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+          meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
         }
       } else {
         document.documentElement.classList.add('forced-laptop-mode');
         if (meta) {
-          const isPhone = window.innerWidth <= 768;
-          if (isPhone) {
-            meta.setAttribute('content', 'width=1200, initial-scale=0.33, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
-          } else {
-            meta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
-          }
+          meta.setAttribute('content', 'width=1200, initial-scale=0.33, maximum-scale=5.0, user-scalable=yes');
         }
       }
     }
   };
 
   useEffect(() => {
-    if (!isMobileMode && typeof document !== 'undefined') {
-      const isPhone = window.innerWidth <= 768;
-      if (isPhone) {
-        document.documentElement.classList.add('forced-laptop-mode');
-        const meta = document.getElementById('viewport-meta') as HTMLMetaElement | null;
+    if (typeof document !== 'undefined') {
+      const isPhone = window.innerWidth <= 768 || /Android|iPhone/i.test(navigator.userAgent);
+      const meta = document.getElementById('viewport-meta') as HTMLMetaElement | null;
+      if (isPhone || isMobileMode) {
+        document.documentElement.classList.remove('forced-laptop-mode');
         if (meta) {
-          meta.setAttribute('content', 'width=1200, initial-scale=0.33, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes');
+          meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
         }
       }
     }
@@ -279,9 +284,10 @@ export function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${isMobileMode ? 'is-mobile-view' : ''}`}>
       {/* Sidebar Navigation */}
-      <aside className={`sidebar ${isIconOnlySidebar ? 'icon-only' : ''}`} style={{ display: isMobileMode ? 'none' : 'flex' }}>
+      {!isMobileMode && (
+        <aside className={`sidebar ${isIconOnlySidebar ? 'icon-only' : ''}`}>
         <div className="sidebar-header">
           <div
             className="logo-badge"
@@ -512,11 +518,11 @@ export function App() {
           )}
         </div>
       </aside>
+      )}
 
       {/* Main Content Area */}
-      <main className="main-content">
-        {/* Mobile Empty Data Recovery Alert */}
-        {properties.length === 0 && (
+      <main className={`main-content ${isMobileMode ? 'is-mobile-main' : ''}`}>
+        {!isMobileMode && properties.length === 0 && (
           <div style={{
             background: 'linear-gradient(90deg, #1e1b4b 0%, #1e293b 100%)',
             borderBottom: '1px solid #6366f1',
@@ -554,114 +560,116 @@ export function App() {
           </div>
         )}
 
-        {/* Top Navbar with Mode Switcher & Quick Actions */}
-        <header className="top-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {/* View Mode Toggle: Desktop vs Mobile View */}
-            <div style={{ display: 'flex', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+        {/* Top Navbar with Mode Switcher & Quick Actions - Only on Desktop */}
+        {!isMobileMode && (
+          <header className="top-bar">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              {/* View Mode Toggle: Desktop vs Mobile View */}
+              <div style={{ display: 'flex', background: 'var(--bg-surface)', padding: '3px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                <button
+                  className={`btn btn-sm ${!isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                  onClick={() => handleSetDeviceMode(false)}
+                  title="Full Laptop / Desktop Dashboard"
+                >
+                  <Monitor size={14} /> 💻 Laptop View
+                </button>
+                <button
+                  className={`btn btn-sm ${isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                  onClick={() => handleSetDeviceMode(true)}
+                  title="Mobile Phone Optimized View"
+                >
+                  <Smartphone size={14} /> 📱 Mobile View
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Real-Time Phone <-> Web Sync Indicator */}
               <button
-                className={`btn btn-sm ${!isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                onClick={() => handleSetDeviceMode(false)}
-                title="Full Laptop / Desktop Dashboard"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsLiveSyncModalOpen(true)}
+                title="Real-Time Phone & Web Synchronization Status"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  borderColor: syncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)',
+                  background: syncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                  padding: '5px 11px'
+                }}
               >
-                <Monitor size={14} /> 💻 Laptop View
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: syncStatus.isLiveConnected ? '#10b981' : '#f59e0b',
+                    boxShadow: syncStatus.isLiveConnected ? '0 0 8px #10b981' : 'none',
+                    display: 'inline-block'
+                  }}
+                />
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: syncStatus.isLiveConnected ? '#34d399' : '#fbbf24' }}>
+                  {syncStatus.isSyncing ? 'Syncing...' : syncStatus.isLiveConnected ? 'Phone & Web Linked' : 'Connecting Sync...'}
+                </span>
               </button>
+
               <button
-                className={`btn btn-sm ${isMobileMode ? 'btn-primary' : 'btn-ghost'}`}
-                style={{ padding: '6px 12px', fontSize: '0.78rem' }}
-                onClick={() => handleSetDeviceMode(true)}
-                title="Mobile Phone Optimized View"
+                className="btn btn-primary btn-sm"
+                onClick={() => setIsMobileInstallOpen(true)}
+                title="Install on Mobile (APK)"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
-                <Smartphone size={14} /> 📱 Mobile View
+                <Smartphone size={15} />
+                <span>Install / APK</span>
+              </button>
+
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsGoogleDriveBackupOpen(true)}
+                title="Backup & Restore (Local Download & Google Drive)"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <HardDrive size={16} color="#818cf8" />
+                <span>Backup</span>
+              </button>
+
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsSettingsOpen(true)}
+                title="System Settings & Profile"
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <div style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                  color: '#fff',
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {userInitials}
+                </div>
+                <span>{landlord.name || 'Settings'}</span>
+              </button>
+
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleLogout}
+                title="Sign Out of Landlord Session"
+                style={{ color: '#fb7185', fontSize: '0.78rem', gap: '5px' }}
+              >
+                <LogOut size={15} />
+                <span>Sign Out</span>
               </button>
             </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Real-Time Phone <-> Web Sync Indicator */}
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setIsLiveSyncModalOpen(true)}
-              title="Real-Time Phone & Web Synchronization Status"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '7px',
-                borderColor: syncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)',
-                background: syncStatus.isLiveConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                padding: '5px 11px'
-              }}
-            >
-              <span
-                style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: syncStatus.isLiveConnected ? '#10b981' : '#f59e0b',
-                  boxShadow: syncStatus.isLiveConnected ? '0 0 8px #10b981' : 'none',
-                  display: 'inline-block'
-                }}
-              />
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: syncStatus.isLiveConnected ? '#34d399' : '#fbbf24' }}>
-                {syncStatus.isSyncing ? 'Syncing...' : syncStatus.isLiveConnected ? 'Phone & Web Linked' : 'Connecting Sync...'}
-              </span>
-            </button>
-
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => setIsMobileInstallOpen(true)}
-              title="Install on Mobile (APK)"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Smartphone size={15} />
-              <span>Install / APK</span>
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setIsGoogleDriveBackupOpen(true)}
-              title="Backup & Restore (Local Download & Google Drive)"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <HardDrive size={16} color="#818cf8" />
-              <span>Backup</span>
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setIsSettingsOpen(true)}
-              title="System Settings & Profile"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <div style={{
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-                color: '#fff',
-                fontSize: '0.68rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                {userInitials}
-              </div>
-              <span>{landlord.name || 'Settings'}</span>
-            </button>
-
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={handleLogout}
-              title="Sign Out of Landlord Session"
-              style={{ color: '#fb7185', fontSize: '0.78rem', gap: '5px' }}
-            >
-              <LogOut size={15} />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* View Mode Router */}
         {isMobileMode ? (
@@ -673,6 +681,7 @@ export function App() {
             onOpenGoogleDriveBackup={() => setIsGoogleDriveBackupOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onSwitchToLaptop={() => handleSetDeviceMode(false)}
+            onLogout={handleLogout}
             syncStatus={syncStatus}
           >
             {renderCurrentPage()}
