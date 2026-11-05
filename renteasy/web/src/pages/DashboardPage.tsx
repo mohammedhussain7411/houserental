@@ -17,6 +17,8 @@ import {
   Zap,
   ArrowRight,
   Cloud,
+  HardDrive,
+  Database,
   PhoneCall,
   Pencil,
   RefreshCw
@@ -168,6 +170,79 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Restore Previous Backup Banner (Shown when properties/tenants are 0 on this device) */}
+      {summary.total_properties === 0 && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(16, 185, 129, 0.12) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '18px 22px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+            boxShadow: '0 6px 20px rgba(0, 0, 0, 0.25)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                background: 'rgba(99, 102, 241, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}
+            >
+              <Database size={22} color="#818cf8" />
+            </div>
+            <div>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#fff' }}>
+                Restore Your Previous Backup
+              </h4>
+              <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Have an existing rental portfolio? Restore from Google Drive or upload a local backup file (.json).
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {onOpenGoogleDriveBackup && (
+              <button
+                className="btn btn-primary btn-sm"
+                style={{ background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}
+                onClick={onOpenGoogleDriveBackup}
+              >
+                <Cloud size={14} /> Restore from Google Drive
+              </button>
+            )}
+
+            {onOpenGoogleDriveBackup && (
+              <button
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                onClick={onOpenGoogleDriveBackup}
+              >
+                <HardDrive size={14} color="#818cf8" /> Restore from Local Backup (.json)
+              </button>
+            )}
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onOpenAddProperty}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={14} /> Add First Property
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quick Phone & Cloud Synchronization Status Bar */}
       <div

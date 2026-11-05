@@ -209,18 +209,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }, 400);
   };
 
-  // 5. MOHAMMED HUSSAIN 1-TAP LOGIN
-  const handleMohammedHussainAutoLogin = () => {
-    setIsLoading(true);
-    setTimeout(() => {
-      rentEasyApi.restoreDefaultPortfolio();
-      localStorage.setItem('renteasy_auth_token', 'true');
-      localStorage.setItem('renteasy_logged_in_email', 'mohammedhussain7411@gmail.com');
-      localStorage.setItem('renteasy_user_name', 'Mohammed Hussain');
-      sessionStorage.removeItem('renteasy_explicit_logout');
-      onLoginSuccess();
-    }, 250);
-  };
+  // 5. REMOVE HARDCODED MOHAMMED HUSSAIN ACCESS
+  // Login is now universal and clean for all landlords
 
   return (
     <div
@@ -488,46 +478,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                 )}
               </button>
             </form>
-
-            {/* Quick Access Card for Landlord Mohammed Hussain */}
-            <div
-              style={{
-                background: 'rgba(99, 102, 241, 0.08)',
-                border: '1px solid rgba(99, 102, 241, 0.25)',
-                borderRadius: '12px',
-                padding: '12px 14px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Sparkles size={13} /> Mohammed Hussain Portfolio
-                </span>
-                <span className="badge badge-paid" style={{ fontSize: '0.65rem' }}>
-                  37 Tenants Active
-                </span>
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleMohammedHussainAutoLogin}
-                style={{
-                  width: '100%',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  justifyContent: 'center',
-                  gap: '6px',
-                  background: 'rgba(99, 102, 241, 0.25)',
-                  border: '1px solid var(--primary)',
-                  marginTop: '2px'
-                }}
-              >
-                <Sparkles size={14} color="var(--primary)" /> 1-Tap Login as Mohammed Hussain (SFR Properties)
-              </button>
-            </div>
           </div>
         )}
 
@@ -728,42 +678,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             </div>
 
             <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Quick 1-Tap Pill for Mohammed Hussain if on this device */}
-              <div
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  background: 'rgba(66, 133, 244, 0.12)',
-                  border: '1px solid rgba(66, 133, 244, 0.35)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '10px'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fff' }}>Mohammed Hussain</div>
-                  <div style={{ fontSize: '0.74rem', color: '#93c5fd' }}>mohammedhussain7411@gmail.com</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)', border: 'none', whiteSpace: 'nowrap' }}
-                  onClick={() => handleConfirmGoogleSignIn('mohammedhussain7411@gmail.com', 'Mohammed Hussain')}
-                >
-                  Continue
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>or enter any other Google account</span>
-                <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
-              </div>
+              <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+                Sign in with your Google email address to link your account and access previous Google Drive backups:
+              </p>
 
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Mail size={14} color="#4285F4" /> Google Account Email
+                  <Mail size={14} color="#4285F4" /> Google Account Email Address *
                 </label>
                 <input
                   type="email"
@@ -772,17 +693,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   value={googleEmailInput}
                   onChange={e => setGoogleEmailInput(e.target.value)}
                   required
+                  autoFocus
                 />
               </div>
 
               <div className="form-group">
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <User size={14} color="#4285F4" /> Landlord Name
+                  <User size={14} color="#4285F4" /> Your Full Name (Optional)
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Mohammed Hussain"
+                  placeholder="e.g. Your Name"
                   value={googleNameInput}
                   onChange={e => setGoogleNameInput(e.target.value)}
                 />
