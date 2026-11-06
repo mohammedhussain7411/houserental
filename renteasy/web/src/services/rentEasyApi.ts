@@ -517,16 +517,113 @@ function deduplicateCharges(charges: RentCharge[]): RentCharge[] {
   return Array.from(map.values());
 }
 
+export function isCurrentUserMohammedHussain(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  const isAuth =
+    localStorage.getItem('renteasy_auth_token') === 'true' ||
+    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true');
+  if (!isAuth) return false;
+  const loggedInEmail = (localStorage.getItem('renteasy_logged_in_email') || '').toLowerCase().trim();
+  return (
+    loggedInEmail.includes('mohammedhussain') ||
+    loggedInEmail === 'admin@renteasy.app' ||
+    loggedInEmail === 'admin'
+  );
+}
+
+const PORTFOLIO_KEYS = new Set([
+  'tenants',
+  'properties',
+  'rent_charges',
+  'payments',
+  'receipts',
+  'leases',
+  'rental_agreements',
+  'property_owners',
+  'message_jobs',
+  'audit_logs'
+]);
+
+function isHussainData(key: string, data: any[]): boolean {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  if (key === 'tenants') {
+    return data.some(
+      (t: any) =>
+        t?.name === 'Gufran' ||
+        t?.name === 'Samurudin' ||
+        (typeof t?.id === 'string' && t.id.startsWith('t-'))
+    );
+  }
+  if (key === 'properties') {
+    return data.some(
+      (p: any) =>
+        p?.name?.includes('SFR') ||
+        p?.id === 'prop-1' ||
+        p?.id === 'prop-2'
+    );
+  }
+  if (key === 'rent_charges') {
+    return data.some(
+      (c: any) =>
+        c?.property_name?.includes('SFR') ||
+        c?.tenant_name === 'Gufran' ||
+        (typeof c?.id === 'string' && c.id.startsWith('chg-mh-'))
+    );
+  }
+  if (key === 'leases') {
+    return data.some((l: any) => typeof l?.id === 'string' && l.id.startsWith('lease-'));
+  }
+  if (key === 'payments') {
+    return data.some((p: any) => typeof p?.id === 'string' && p.id.startsWith('pay-'));
+  }
+  if (key === 'receipts') {
+    return data.some((r: any) => typeof r?.id === 'string' && r.id.startsWith('rcpt-'));
+  }
+  return false;
+}
+
 function loadOrInit<T>(key: string, defaultVal: T): T {
   try {
+    const isHussain = isCurrentUserMohammedHussain();
+    const isPortfolio = PORTFOLIO_KEYS.has(key);
+
+    // STRICT MULTI-TENANT ISOLATION:
+    // Any user other than Mohammed Hussain MUST have an empty portfolio by default.
+    // Mohammed Hussain's mock portfolio MUST NEVER be returned to or seeded for any other user!
+    if (isPortfolio && !isHussain) {
+      const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key);
+      if (!raw) {
+        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify([]));
+        return [] as unknown as T;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify([]));
+        return [] as unknown as T;
+      }
+      // If a non-Hussain user previously had Hussain's portfolio leak into their storage, purge it immediately:
+      if (isHussainData(key, parsed)) {
+        localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify([]));
+        return [] as unknown as T;
+      }
+      return parsed as unknown as T;
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY_PREFIX + key);
     if (!raw) {
       localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultVal));
       return defaultVal;
     }
     const parsed = JSON.parse(raw);
-    // If client had empty tenants/properties saved from prior session, auto-seed with default portfolio
-    if ((key === 'tenants' || key === 'properties') && Array.isArray(parsed) && parsed.length === 0 && Array.isArray(defaultVal) && defaultVal.length > 0) {
+    // If Mohammed Hussain had empty tenants/properties saved from prior session, auto-seed with default portfolio
+    if (
+      isHussain &&
+      (key === 'tenants' || key === 'properties') &&
+      Array.isArray(parsed) &&
+      parsed.length === 0 &&
+      Array.isArray(defaultVal) &&
+      defaultVal.length > 0
+    ) {
       localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(defaultVal));
       return defaultVal;
     }
@@ -537,16 +634,8 @@ function loadOrInit<T>(key: string, defaultVal: T): T {
     }
     return parsed;
   } catch {
-    return defaultVal;
+    return (PORTFOLIO_KEYS.has(key) && !isCurrentUserMohammedHussain()) ? ([] as unknown as T) : defaultVal;
   }
-}
-
-export function isCurrentUserMohammedHussain(): boolean {
-  if (typeof localStorage === 'undefined') return false;
-  const isAuth = localStorage.getItem('renteasy_auth_token') === 'true' || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('renteasy_auth_token') === 'true');
-  if (!isAuth) return false;
-  const loggedInEmail = (localStorage.getItem('renteasy_logged_in_email') || '').toLowerCase().trim();
-  return loggedInEmail.includes('mohammedhussain') || loggedInEmail === 'admin@renteasy.app';
 }
 
 function ensureInitialSeed(): void {
@@ -713,10 +802,11 @@ class RentEasyApiService {
 
   // 1. AUTOMATIC MONTHLY RENT UPDATER ON GIVEN DUE DATE
   autoCheckAndApplyMonthlyRent(referenceDate = new Date()): { updatedCount: number; messagesSent: number } {
-    let rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    const isHussain = isCurrentUserMohammedHussain();
+    let rawCharges = loadOrInit('rent_charges', isHussain ? initialRentCharges : []);
     let charges = deduplicateCharges(rawCharges);
     let chargesModified = charges.length !== rawCharges.length;
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isHussain ? initialTenants : []);
     const year = referenceDate.getFullYear();
     const month = referenceDate.getMonth() + 1;
     const currentPeriod = `${year}-${String(month).padStart(2, '0')}`;
@@ -829,9 +919,10 @@ class RentEasyApiService {
   }
 
   generateMonthlyCharges(periodMonth: string): { createdCount: number } {
-    let rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    const isHussain = isCurrentUserMohammedHussain();
+    let rawCharges = loadOrInit('rent_charges', isHussain ? initialRentCharges : []);
     let charges = deduplicateCharges(rawCharges);
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isHussain ? initialTenants : []);
     let createdCount = 0;
 
     for (const t of tenants) {
@@ -882,8 +973,9 @@ class RentEasyApiService {
 
   // Recalculates live house balance for each tenant: Due = Previous Balance + Present Rent - Payments
   recalculateTenantBalances(): void {
-    const tenants = loadOrInit('tenants', initialTenants);
-    const rawCharges = loadOrInit('rent_charges', initialRentCharges);
+    const isHussain = isCurrentUserMohammedHussain();
+    const tenants = loadOrInit('tenants', isHussain ? initialTenants : []);
+    const rawCharges = loadOrInit('rent_charges', isHussain ? initialRentCharges : []);
     const charges = deduplicateCharges(rawCharges);
     if (charges.length !== rawCharges.length) {
       saveLocalOnly('rent_charges', charges);
@@ -1080,7 +1172,7 @@ class RentEasyApiService {
     save('properties', properties);
 
     // 2. Synchronize any tenant assigned to this unit
-    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const tenants = loadOrInit<Tenant[]>('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     let tenantUpdated = false;
     tenants.forEach(t => {
       const belongsToThisProp =
@@ -1159,7 +1251,7 @@ class RentEasyApiService {
     const rawNumber = newHouseNumber.trim();
     if (!rawNumber) throw new Error('House number cannot be empty.');
 
-    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const tenants = loadOrInit<Tenant[]>('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const tenant = tenants.find(t => t.id === tenantId);
     if (!tenant) throw new Error('Tenant not found.');
 
@@ -1253,7 +1345,7 @@ class RentEasyApiService {
   }
 
   moveTenantOrder(tenantId: string, direction: 'up' | 'down'): boolean {
-    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const tenants = loadOrInit<Tenant[]>('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const index = tenants.findIndex(t => t.id === tenantId);
     if (index === -1) return false;
 
@@ -1280,7 +1372,7 @@ class RentEasyApiService {
   }
 
   sortTenantsByHouseNumber(ascending = true): boolean {
-    const tenants = loadOrInit<Tenant[]>('tenants', initialTenants);
+    const tenants = loadOrInit<Tenant[]>('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     tenants.sort((a, b) => {
       // Group by property name first so Property A and Property C tenants stay distinct
       const propA = (a.linked_property_name || '').trim().toLowerCase();
@@ -1420,7 +1512,7 @@ class RentEasyApiService {
     const prop = properties[propIndex];
 
     // Unlink any tenants associated with this property
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     let tenantsUpdated = false;
     tenants.forEach(t => {
       const belongsToThisProp =
@@ -1460,7 +1552,7 @@ class RentEasyApiService {
 
     // If unit is occupied, unlink tenant
     if (unit.status === 'occupied') {
-      const tenants = loadOrInit('tenants', initialTenants);
+      const tenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
       const tenant = tenants.find(t => t.house_number === unit.unit_number && t.linked_property_name === prop.name);
       if (tenant) {
         tenant.linked_property_name = undefined;
@@ -1482,7 +1574,7 @@ class RentEasyApiService {
   }
 
   deleteTenant(tenantId: string): boolean {
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const tenantIndex = tenants.findIndex(t => t.id === tenantId);
     if (tenantIndex === -1) return false;
 
@@ -1701,7 +1793,7 @@ class RentEasyApiService {
       initial_balance?: number;
     }
   ): Tenant {
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const tenantIndex = tenants.findIndex(t => t.id === tenantId);
     if (tenantIndex === -1) throw new Error('Tenant not found');
 
@@ -1963,7 +2055,7 @@ class RentEasyApiService {
     }
 
     // 7. Reload updated tenant to return latest balance
-    const refreshedTenants = loadOrInit('tenants', initialTenants);
+    const refreshedTenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const updatedTenant = refreshedTenants.find(t => t.id === tenantId) || tenant;
 
     // 8. Audit log
@@ -2087,7 +2179,7 @@ class RentEasyApiService {
     resetMoveInDate = false,
     newMoveInDate?: string
   ): Tenant {
-    const tenants = loadOrInit('tenants', initialTenants);
+    const tenants = loadOrInit('tenants', isCurrentUserMohammedHussain() ? initialTenants : []);
     const tenant = tenants.find(t => t.id === tenantId);
     if (!tenant) throw new Error('Tenant not found');
 
