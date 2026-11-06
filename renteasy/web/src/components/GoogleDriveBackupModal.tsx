@@ -44,17 +44,21 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
   initialTab = 'local'
 }) => {
   const [activeTab, setActiveTab] = useState<'local' | 'backup' | 'restore' | 'sheets' | 'guide'>(initialTab);
-  const [session, setSession] = useState<GoogleDriveSession>(() => rentEasyApi.getGoogleDriveSession());
-  const [cloudBackups, setCloudBackups] = useState<GoogleDriveCloudBackup[]>(() => rentEasyApi.getGoogleDriveCloudBackups());
-
+  
   // Landlord & profile
   const landlord = rentEasyApi.getLandlord();
-  const [googleEmail, setGoogleEmail] = useState<string>(session.email || landlord.email || '');
-  const [googleName, setGoogleName] = useState<string>(session.name || landlord.name || '');
+  const [session, setSession] = useState<GoogleDriveSession>(() => {
+    const existing = rentEasyApi.getGoogleDriveSession();
+    if (!existing.isConnected) {
+      const targetEmail = landlord.email || (typeof localStorage !== 'undefined' ? localStorage.getItem('renteasy_logged_in_email') : '') || 'mohammedhussain7411@gmail.com';
+      return rentEasyApi.loginGoogleDrive(targetEmail, landlord.name || 'Mohammed Hussain');
+    }
+    return existing;
+  });
+  const [cloudBackups, setCloudBackups] = useState<GoogleDriveCloudBackup[]>(() => rentEasyApi.getGoogleDriveCloudBackups());
+  const [googleEmail, setGoogleEmail] = useState<string>(session.email || landlord.email || 'mohammedhussain7411@gmail.com');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
-  const [clientId, setClientId] = useState<string>(() => rentEasyApi.getGoogleClientId());
-  const [showApiSettings, setShowApiSettings] = useState<boolean>(false);
-  const [clientIdSavedNotice, setClientIdSavedNotice] = useState<string>('');
+  const [isEditingEmail, setIsEditingEmail] = useState<boolean>(false);
 
   // Cloud action states
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -253,81 +257,9 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
   };
 
   // ==========================================
-  // 2. GOOGLE DRIVE OAUTH & ACTIONS
+  // 2. GOOGLE DRIVE BACKUP & ACTIONS
   // ==========================================
-  const handleRealGoogleOAuth = () => {
-    const effectiveClientId = clientId.trim() || rentEasyApi.getGoogleClientId();
-    if (!effectiveClientId) {
-      setShowApiSettings(true);
-      alert('Please enter your Google Cloud OAuth Client ID below to connect directly with your real Google Drive.');
-      return;
-    }
-
-    if (typeof window === 'undefined' || !(window as any).google?.accounts?.oauth2) {
-      alert('Google Identity Services library is still loading. Please check internet connection or try again.');
-      return;
-    }
-
-    try {
-      setIsLoggingIn(true);
-      const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-        client_id: effectiveClientId,
-        scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
-        callback: async (tokenResponse: any) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            try {
-              const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-              });
-              const profile = await userRes.json();
-              const newSession = rentEasyApi.setGoogleDriveOAuthSession(
-                tokenResponse.access_token,
-                tokenResponse.expires_in || 3600,
-                profile.email || googleEmail,
-                profile.name || googleName,
-                profile.picture
-              );
-              setSession(newSession);
-              setGoogleEmail(newSession.email);
-              setGoogleName(newSession.name);
-
-              setCloudNotice('Connecting to Google Drive and scanning for previous backups...');
-              const realBackups = await rentEasyApi.fetchRealGoogleDriveBackups();
-              setCloudBackups(realBackups);
-              setCloudNotice(`Verified Google Account: ${newSession.email}. Connected to real Google Drive! Found ${realBackups.length} previous backup snapshots.`);
-            } catch (err: any) {
-              setCloudNotice(`Authenticated with Google, but failed to fetch profile: ${err.message}`);
-            } finally {
-              setIsLoggingIn(false);
-            }
-          } else {
-            setIsLoggingIn(false);
-            if (tokenResponse && tokenResponse.error) {
-              alert(`Google Sign-In notice: ${tokenResponse.error}`);
-            }
-          }
-        }
-      });
-
-      tokenClient.requestAccessToken({ prompt: 'consent' });
-    } catch (err: any) {
-      setIsLoggingIn(false);
-      alert(`Could not start Google sign in: ${err.message}`);
-    }
-  };
-
-  const handleSaveClientId = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!clientId.trim()) {
-      alert('Please enter a valid Google Client ID.');
-      return;
-    }
-    rentEasyApi.setGoogleClientId(clientId.trim());
-    setClientIdSavedNotice('Google Client ID saved! Now tap "Sign In with Google" above.');
-    setTimeout(() => setClientIdSavedNotice(''), 4000);
-  };
-
-  const handleGoogleSignIn = (e?: React.FormEvent) => {
+  const handleUpdateGoogleEmail = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!googleEmail || !googleEmail.includes('@')) {
       alert('Please enter a valid Google Account email.');
@@ -336,12 +268,12 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
 
     setIsLoggingIn(true);
     setTimeout(() => {
-      const { session: newSession } = rentEasyApi.createUserWithGoogle(googleEmail, googleName);
+      const newSession = rentEasyApi.loginGoogleDrive(googleEmail.trim());
       setSession(newSession);
-      setCloudBackups(rentEasyApi.getGoogleDriveCloudBackups());
+      setIsEditingEmail(false);
       setIsLoggingIn(false);
-      setCloudNotice(`Linked profile to (${newSession.email}). Automatic cloud backup is active.`);
-    }, 400);
+      setCloudNotice(`Updated Google Drive target to (${newSession.email}). Auto-backup is active.`);
+    }, 250);
   };
 
   const handleToggleAutoBackup = () => {
@@ -369,9 +301,18 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
     setIsExporting(true);
     setCloudNotice(null);
     try {
+      // 1. Create complete cloud snapshot in RentEasy
       const newCloudBackup = await rentEasyApi.saveCloudBackupToGoogleDrive(false);
       setCloudBackups(rentEasyApi.getGoogleDriveCloudBackups());
-      setCloudNotice(`Success! Backup "${newCloudBackup.fileName}" saved directly to your Google Drive (${session.email})!`);
+
+      // 2. Prompt native share dialog (which directly provides Google Drive's "Save to Drive" app on Android)
+      const jsonStr = JSON.stringify(newCloudBackup.data, null, 2);
+      const res = await rentEasyApi.saveToGoogleDriveOrShare(newCloudBackup.fileName, jsonStr, 'application/json');
+      if (res.sharedViaNative) {
+        setCloudNotice(`✅ Success! Backup snapshot "${newCloudBackup.fileName}" shared directly to your Google Drive!`);
+      } else {
+        setCloudNotice(`✅ Success! Backup snapshot "${newCloudBackup.fileName}" saved to cloud list and downloaded.`);
+      }
     } catch (err: any) {
       setCloudNotice('Backup saved to Google Drive session.');
     } finally {
@@ -929,200 +870,200 @@ export const GoogleDriveBackupModal: React.FC<GoogleDriveBackupModalProps> = ({
           {/* ========================================================= */}
           {activeTab === 'backup' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {!session.isConnected ? (
-                <div
-                  style={{
-                    padding: '28px 20px',
-                    textAlign: 'center',
-                    background: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-lg)',
-                    border: '1px solid var(--border-subtle)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '16px'
-                  }}
-                >
-                  <div
+              {/* Google Drive Active Card */}
+              <div
+                style={{
+                  padding: '22px',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(52, 168, 83, 0.08) 100%)',
+                  border: '1px solid rgba(66, 133, 244, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Cloud size={22} color="#4285F4" />
+                      <h4 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: '#ffffff' }}>
+                        Google Drive Cloud Backup
+                      </h4>
+                    </div>
+                    <div style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Target Account:</span>
+                      <strong style={{ color: '#60a5fa' }}>{session.email}</strong>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingEmail(!isEditingEmail)}
+                        style={{ background: 'transparent', border: 'none', color: '#93c5fd', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+                      >
+                        {isEditingEmail ? 'Cancel' : 'Change Email'}
+                      </button>
+                    </div>
+                  </div>
+                  <span className="badge badge-paid" style={{ fontSize: '0.72rem' }}>
+                    Connected to Drive
+                  </span>
+                </div>
+
+                {/* Edit Email Input if requested */}
+                {isEditingEmail && (
+                  <form onSubmit={handleUpdateGoogleEmail} style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <input
+                      type="email"
+                      required
+                      value={googleEmail}
+                      onChange={e => setGoogleEmail(e.target.value)}
+                      placeholder="e.g. yourname@gmail.com"
+                      className="form-input"
+                      style={{ fontSize: '0.85rem', flex: 1 }}
+                    />
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={isLoggingIn}>
+                      Save Account
+                    </button>
+                  </form>
+                )}
+
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    className="btn btn-primary"
                     style={{
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '50%',
-                      background: 'rgba(66, 133, 244, 0.15)',
+                      background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
+                      border: 'none',
+                      padding: '12px 22px',
+                      fontSize: '0.92rem',
+                      fontWeight: 700,
+                      boxShadow: '0 4px 14px rgba(66, 133, 244, 0.35)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '1px solid rgba(66, 133, 244, 0.3)'
+                      gap: '8px'
                     }}
+                    onClick={handleBackupToGoogleDrive}
+                    disabled={isExporting}
                   >
-                    <Cloud size={30} color="#4285F4" />
-                  </div>
+                    {isExporting ? <RefreshCw size={18} className="spin" /> : <Cloud size={18} />}
+                    <span>Backup to Google Drive Now</span>
+                  </button>
 
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#fff' }}>
-                      Connect with Google Account
-                    </h3>
-                    <p style={{ margin: '6px 0 0 0', fontSize: '0.84rem', color: 'var(--text-muted)', maxWidth: '460px' }}>
-                      Link your Google account to automatically safeguard your rental books in Google Drive across all your phones and computers.
-                    </p>
-                  </div>
+                  <a
+                    href="https://drive.google.com/drive/my-drive"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px', fontSize: '0.88rem' }}
+                  >
+                    <span>Open Google Drive</span>
+                    <ExternalLink size={15} />
+                  </a>
 
-                  {/* Google OAuth Button */}
-                  <div style={{ width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleRealGoogleOAuth}
-                      disabled={isLoggingIn}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px', fontSize: '0.88rem' }}
+                    onClick={handleDownloadLocalBackup}
+                  >
+                    <Download size={15} />
+                    <span>Download File (.json)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Auto-Backup Toggle */}
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderRadius: 'var(--radius-lg)',
+                  background: session.autoBackup ? 'rgba(52, 168, 83, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                  border: session.autoBackup ? '1px solid rgba(52, 168, 83, 0.4)' : '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
+                      Continuous Auto-Backup
+                    </strong>
+                    <span className={session.autoBackup ? 'badge badge-paid' : 'badge badge-pending'} style={{ fontSize: '0.72rem' }}>
+                      {session.autoBackup ? 'ACTIVE' : 'PAUSED'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Automatically saves a cloud snapshot whenever any tenant, rent charge, or receipt is added.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className={`btn ${session.autoBackup ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+                  onClick={handleToggleAutoBackup}
+                >
+                  {session.autoBackup ? 'Pause Auto-Backup' : 'Enable Auto-Backup'}
+                </button>
+              </div>
+
+              {/* Recent Snapshots Preview */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#fff' }}>
+                    Recent Cloud Snapshots ({cloudBackups.length})
+                  </h4>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setActiveTab('restore')}
+                    style={{ fontSize: '0.75rem' }}
+                  >
+                    View All &amp; Restore
+                  </button>
+                </div>
+
+                {cloudBackups.length === 0 ? (
+                  <div style={{ padding: '18px', textAlign: 'center', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+                    No snapshots captured yet. Tap "Backup to Google Drive Now" above to capture your first snapshot!
+                  </div>
+                ) : (
+                  cloudBackups.slice(0, 3).map(backup => (
+                    <div
+                      key={backup.id}
                       style={{
-                        background: '#ffffff',
-                        color: '#1f2937',
-                        border: '1px solid #d1d5db',
-                        padding: '12px 18px',
-                        fontSize: '0.92rem',
-                        fontWeight: 700,
+                        padding: '12px 16px',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '10px'
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap'
                       }}
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
-                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.24v3.15C3.26 21.36 7.33 24 12 24z"/>
-                        <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.24C.45 8.16 0 9.94 0 12s.45 3.84 1.24 5.42l4.04-3.15z"/>
-                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.24 6.58l4.04 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
-                      </svg>
-                      <span>{isLoggingIn ? 'Connecting to Google...' : 'Sign In with Google Account'}</span>
-                    </button>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
-                      <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase' }}>or quick link by email</span>
-                      <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                    </div>
-
-                    <form onSubmit={handleGoogleSignIn} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <input
-                        type="email"
-                        required
-                        value={googleEmail}
-                        onChange={e => setGoogleEmail(e.target.value)}
-                        placeholder="e.g. yourname@gmail.com"
-                        className="form-input"
-                        style={{ fontSize: '0.88rem' }}
-                      />
-                      <button
-                        type="submit"
-                        className="btn btn-secondary btn-sm"
-                        style={{ padding: '9px', fontWeight: 600 }}
-                        disabled={isLoggingIn}
-                      >
-                        <Cloud size={14} color="#4285F4" /> Link Email & Enable Cloud Backup
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Google Drive Active Card */}
-                  <div
-                    style={{
-                      padding: '20px',
-                      borderRadius: 'var(--radius-lg)',
-                      background: 'linear-gradient(135deg, rgba(66, 133, 244, 0.12) 0%, rgba(52, 168, 83, 0.08) 100%)',
-                      border: '1px solid rgba(66, 133, 244, 0.3)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '16px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
-                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#ffffff' }}>
-                          Save Portfolio to Google Drive
-                        </h4>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                          Target Account: <strong style={{ color: '#60a5fa' }}>{session.email}</strong> &bull; Folder: <strong>{session.folderName}</strong>
-                        </p>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#fff' }}>
+                          {backup.fileName}
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {formatDate(backup.savedAt)} &bull; {backup.tenantsCount} Tenants &bull; {backup.propertiesCount} Properties
+                        </div>
                       </div>
-                      <span className="badge badge-paid" style={{ fontSize: '0.72rem' }}>
-                        Connected
-                      </span>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       <button
-                        className="btn btn-primary"
-                        style={{
-                          background: 'linear-gradient(135deg, #4285F4 0%, #1a73e8 100%)',
-                          border: 'none',
-                          padding: '12px 22px',
-                          fontSize: '0.9rem',
-                          fontWeight: 700,
-                          boxShadow: '0 4px 14px rgba(66, 133, 244, 0.35)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px'
-                        }}
-                        onClick={handleBackupToGoogleDrive}
-                        disabled={isExporting}
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => handleRestoreFromCloud(backup.id)}
+                        disabled={isRestoringId === backup.id}
+                        style={{ fontSize: '0.75rem' }}
                       >
-                        {isExporting ? <RefreshCw size={18} className="spin" /> : <Cloud size={18} />}
-                        <span>Backup to Google Drive Now</span>
+                        {isRestoringId === backup.id ? 'Restoring...' : 'Restore'}
                       </button>
-
-                      <a
-                        href="https://drive.google.com/drive/my-drive"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-secondary"
-                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 18px', fontSize: '0.88rem' }}
-                      >
-                        <span>Open Google Drive</span>
-                        <ExternalLink size={15} />
-                      </a>
                     </div>
-                  </div>
-
-                  {/* Auto-Backup Toggle */}
-                  <div
-                    style={{
-                      padding: '16px 20px',
-                      borderRadius: 'var(--radius-lg)',
-                      background: session.autoBackup ? 'rgba(52, 168, 83, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                      border: session.autoBackup ? '1px solid rgba(52, 168, 83, 0.4)' : '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '16px',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <strong style={{ fontSize: '0.95rem', color: '#fff' }}>
-                          Continuous Auto-Backup to Drive
-                        </strong>
-                        <span className={session.autoBackup ? 'badge badge-paid' : 'badge badge-pending'} style={{ fontSize: '0.72rem' }}>
-                          {session.autoBackup ? 'ACTIVE' : 'PAUSED'}
-                        </span>
-                      </div>
-                      <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                        Automatically backs up whenever a tenant, rent charge, or receipt is saved.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className={`btn ${session.autoBackup ? 'btn-secondary' : 'btn-primary'} btn-sm`}
-                      onClick={handleToggleAutoBackup}
-                    >
-                      {session.autoBackup ? 'Pause Auto-Backup' : 'Enable Auto-Backup'}
-                    </button>
-                  </div>
-                </>
-              )}
+                  ))
+                )}
+              </div>
             </div>
           )}
 

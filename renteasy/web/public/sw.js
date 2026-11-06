@@ -1,4 +1,4 @@
-const CACHE_NAME = 'renteasy-pwa-v8-clean-login';
+const CACHE_NAME = 'renteasy-pwa-v9-gdrive-backup';
 const BASE = self.location.pathname.replace(/sw\.js$/, '');
 
 self.addEventListener('install', (event) => {
